@@ -94,21 +94,21 @@ class Movie extends Model
     public function people(): BelongsToMany
     {
         return $this->belongsToMany(Person::class, 'movie_person')
-                    ->withPivot(['role', 'character_name', 'sort_order']);
+            ->withPivot(['role', 'character_name', 'sort_order']);
     }
 
     public function actors(): BelongsToMany
     {
         return $this->belongsToMany(Person::class, 'movie_person')
-                    ->wherePivot('role', 'actor')
-                    ->withPivot(['character_name', 'sort_order']);
+            ->wherePivot('role', 'actor')
+            ->withPivot(['character_name', 'sort_order']);
     }
 
     public function directors(): BelongsToMany
     {
         return $this->belongsToMany(Person::class, 'movie_person')
-                    ->wherePivot('role', 'director')
-                    ->withPivot(['character_name', 'sort_order']);
+            ->wherePivot('role', 'director')
+            ->withPivot(['character_name', 'sort_order']);
     }
 
     public function episodes(): HasMany

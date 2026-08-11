@@ -38,7 +38,7 @@ class Collection extends Model
     public function movies(): BelongsToMany
     {
         return $this->belongsToMany(Movie::class, 'collection_movie')
-                    ->withPivot('sort_order')
-                    ->orderByPivot('sort_order', 'asc');
+            ->withPivot('sort_order')
+            ->orderByPivot('sort_order', 'asc');
     }
 }

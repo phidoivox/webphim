@@ -34,6 +34,6 @@ class Person extends Model
     public function movies(): BelongsToMany
     {
         return $this->belongsToMany(Movie::class, 'movie_person')
-                    ->withPivot(['role', 'character_name', 'sort_order']);
+            ->withPivot(['role', 'character_name', 'sort_order']);
     }
 }

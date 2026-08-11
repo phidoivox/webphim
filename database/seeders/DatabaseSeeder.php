@@ -59,7 +59,7 @@ class DatabaseSeeder extends Seeder
             Person::query()->create([
                 'name' => $p['name'],
                 'slug' => $p['slug'],
-                'avatar_url' => "https://picsum.photos/seed/person-".($i + 1)."/200/200",
+                'avatar_url' => 'https://picsum.photos/seed/person-'.($i + 1).'/200/200',
             ]);
         }
 
