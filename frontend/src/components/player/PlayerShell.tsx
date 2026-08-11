@@ -117,6 +117,7 @@ export default function PlayerShell({ src, title, autoPlay = false }: PlayerShel
           onPause={() => { setPlaying(false); setControlsVisible(true); }}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => {
+            setVideoError(false);
             setDuration(e.currentTarget.duration);
             if (pendingSeekRef.current != null) {
               e.currentTarget.currentTime = pendingSeekRef.current;
@@ -127,6 +128,7 @@ export default function PlayerShell({ src, title, autoPlay = false }: PlayerShel
               wasPlayingRef.current = false;
             }
           }}
+          onPlaying={() => setVideoError(false)}
           onError={() => setVideoError(true)}
         />
       ) : (
