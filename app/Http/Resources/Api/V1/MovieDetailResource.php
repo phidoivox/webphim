@@ -86,6 +86,7 @@ class MovieDetailResource extends JsonResource
         return Movie::query()
             ->whereKeyNot($movie->id)
             ->where('is_active', true)
+            ->withoutTrashed()
             ->whereHas('genres', fn ($q) => $q->whereIn('genres.id', $movie->genres->pluck('id')))
             ->with('genres')
             ->orderByDesc('rating_avg')

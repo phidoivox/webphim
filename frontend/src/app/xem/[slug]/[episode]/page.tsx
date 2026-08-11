@@ -179,7 +179,7 @@ export default function WatchPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => { setBookmarked((v) => !v); flash(bookmarked ? "Đã bỏ bookmark" : "Đã lưu bookmark"); }}
+                onClick={() => { setBookmarked((v) => !v); flash(bookmarked ? "Đã bỏ lưu" : "Đã lưu phim"); }}
                 className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
                   bookmarked ? "border-accent bg-accent/15 text-accent" : "border-elevated bg-surface text-muted hover:text-ink"
                 }`}

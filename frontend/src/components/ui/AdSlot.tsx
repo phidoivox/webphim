@@ -48,7 +48,10 @@ export default function AdSlot({ onEnded }: AdSlotProps) {
       <button
         type="button"
         disabled={remaining > SKIP_AFTER_SECONDS}
-        onClick={() => setDismissed(true)}
+        onClick={() => {
+          onEndedRef.current?.();
+          setDismissed(true);
+        }}
         className={`rounded-lg px-4 py-1.5 text-xs font-bold transition-colors ${
           remaining > SKIP_AFTER_SECONDS
             ? "cursor-not-allowed bg-elevated text-faint"
