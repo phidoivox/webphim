@@ -37,3 +37,53 @@ export interface CarouselSection {
   title: string;
   movies: MovieSummary[];
 }
+
+export interface EpisodeServer {
+  id: number;
+  serverName: string;
+  langType: string;
+  linkM3u8: string | null;
+}
+
+export interface MovieEpisode {
+  id: number;
+  name: string;
+  slug: string;
+  servers: EpisodeServer[];
+}
+
+export interface Credit {
+  id: number;
+  name: string;
+  avatarUrl: string | null;
+  characterName?: string | null;
+}
+
+export interface MovieDetail {
+  id: number;
+  slug: string;
+  name: string;
+  originName: string | null;
+  thumbUrl: string;
+  posterUrl: string;
+  content: string | null;
+  year: number | null;
+  quality: string | null;
+  type: string;
+  status: string;
+  episodeCurrent: string | null;
+  episodeTotal: string | null;
+  ratingAvg: number;
+  ratingCount: number;
+  viewCount: number;
+  isCinema: boolean;
+  isNew: boolean;
+  isHot: boolean;
+  trailerUrl: string | null;
+  durationMinutes: number | null;
+  genres: string[];
+  countries: string[];
+  episodes: MovieEpisode[];
+  credits: { directors: Credit[]; actors: Credit[] };
+  similar: MovieSummary[];
+}

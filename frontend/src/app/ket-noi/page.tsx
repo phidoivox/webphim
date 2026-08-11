@@ -1,38 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/api";
 
 interface BackendStatus {
   status: string;
   message: string;
   timestamp: string;
   framework: string;
-}
-
-const POSSIBLE_API_URLS = [
-  process.env.NEXT_PUBLIC_API_URL || "http://webphim.test/api",
-  "http://localhost/webphim/public/api",
-  "http://127.0.0.1:8000/api",
-  "http://localhost:8000/api",
-];
-
-const ERROR_MESSAGE =
-  "Không thể kết nối đến Backend Laravel qua các địa chỉ (webphim.test, localhost/webphim/public, 127.0.0.1:8000). Vui lòng kiểm tra Apache/Nginx trên Laragon hoặc gõ lệnh `php artisan serve`.";
-
-/** Probe lần lượt các URL — thuần async, không setState. */
-async function probeBackends(): Promise<{ url: string; data: BackendStatus } | null> {
-  for (const url of POSSIBLE_API_URLS) {
-    try {
-      const res = await fetch(`${url}/status`, { cache: "no-store" });
-      if (res.ok) {
-        const data: BackendStatus = await res.json();
-        return { url, data };
-      }
-    } catch {
-      // Tiếp tục thử URL tiếp theo
-    }
-  }
-  return null;
 }
 
 export default function KetNoi() {
@@ -46,12 +21,12 @@ export default function KetNoi() {
     setError(null);
     setData(null);
 
-    const result = await probeBackends();
-    if (!result) {
-      setError(ERROR_MESSAGE);
-    } else {
-      setData(result.data);
-      setActiveUrl(result.url);
+    try {
+      const { baseUrl, data: json } = await fetchJson<BackendStatus>("/status");
+      setData(json);
+      setActiveUrl(baseUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Đã có lỗi xảy ra");
     }
     setLoading(false);
   };
@@ -59,16 +34,19 @@ export default function KetNoi() {
   useEffect(() => {
     // Trạng thái khởi tạo đã là loading=true — setState chỉ xảy ra trong callback async
     let mounted = true;
-    probeBackends().then((result) => {
-      if (!mounted) return;
-      if (!result) {
-        setError(ERROR_MESSAGE);
-      } else {
-        setData(result.data);
-        setActiveUrl(result.url);
-      }
-      setLoading(false);
-    });
+    fetchJson<BackendStatus>("/status")
+      .then(({ baseUrl, data: json }) => {
+        if (!mounted) return;
+        setData(json);
+        setActiveUrl(baseUrl);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : "Đã có lỗi xảy ra");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
     return () => {
       mounted = false;
     };
