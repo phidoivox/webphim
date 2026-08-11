@@ -15,7 +15,12 @@ export default function AdSlot({ onEnded }: AdSlotProps) {
   const [dismissed, setDismissed] = useState(false);
   const firedRef = useRef(false);
   const onEndedRef = useRef(onEnded);
-  onEndedRef.current = onEnded;
+
+  // Cập nhật ref callback trong effect (KHÔNG viết ref lúc render — rule react-hooks/refs chặn;
+  // dep-less effect giữ ref luôn fresh, tương đương hành vi)
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  });
 
   useEffect(() => {
     const id = setInterval(() => {
