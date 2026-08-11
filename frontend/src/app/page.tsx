@@ -16,6 +16,25 @@ const POSSIBLE_API_URLS = [
   "http://localhost:8000/api",
 ];
 
+const ERROR_MESSAGE =
+  "Không thể kết nối đến Backend Laravel qua các địa chỉ (webphim.test, localhost/webphim/public, 127.0.0.1:8000). Vui lòng kiểm tra Apache/Nginx trên Laragon hoặc gõ lệnh `php artisan serve`.";
+
+/** Probe lần lượt các URL — thuần async, không setState. */
+async function probeBackends(): Promise<{ url: string; data: BackendStatus } | null> {
+  for (const url of POSSIBLE_API_URLS) {
+    try {
+      const res = await fetch(`${url}/status`, { cache: "no-store" });
+      if (res.ok) {
+        const data: BackendStatus = await res.json();
+        return { url, data };
+      }
+    } catch {
+      // Tiếp tục thử URL tiếp theo
+    }
+  }
+  return null;
+}
+
 export default function Home() {
   const [data, setData] = useState<BackendStatus | null>(null);
   const [activeUrl, setActiveUrl] = useState<string>("");
@@ -27,38 +46,38 @@ export default function Home() {
     setError(null);
     setData(null);
 
-    let connected = false;
-
-    // Thử lần lượt các URL phổ biến (Laragon domain, Laragon subpath, php artisan serve)
-    for (const url of POSSIBLE_API_URLS) {
-      try {
-        const res = await fetch(`${url}/status`, { cache: "no-store" });
-        if (res.ok) {
-          const json: BackendStatus = await res.json();
-          setData(json);
-          setActiveUrl(url);
-          connected = true;
-          break;
-        }
-      } catch (err) {
-        // Tiếp tục thử URL tiếp theo
-      }
-    }
-
-    if (!connected) {
-      setError("Không thể kết nối đến Backend Laravel qua các địa chỉ (webphim.test, localhost/webphim/public, 127.0.0.1:8000). Vui lòng kiểm tra Apache/Nginx trên Laragon hoặc gõ lệnh `php artisan serve`.");
+    const result = await probeBackends();
+    if (!result) {
+      setError(ERROR_MESSAGE);
+    } else {
+      setData(result.data);
+      setActiveUrl(result.url);
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    checkConnection();
+    // Trạng thái khởi tạo đã là loading=true — setState chỉ xảy ra trong callback async
+    let mounted = true;
+    probeBackends().then((result) => {
+      if (!mounted) return;
+      if (!result) {
+        setError(ERROR_MESSAGE);
+      } else {
+        setData(result.data);
+        setActiveUrl(result.url);
+      }
+      setLoading(false);
+    });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 font-sans">
       <div className="w-full max-w-2xl bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-6 mb-6">
           <div className="flex items-center space-x-3">
