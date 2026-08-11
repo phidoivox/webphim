@@ -2,6 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Execution notes (2026-08-11 — đã hoàn thành)
+
+✅ Tất cả 6 task đã xong (7 commit trên `main`, từ `e67cc22` → `083e920`). Lệch so với plan:
+
+1. **Task 1**: branch mặc định đổi thành `main`; git identity local `vohoa <vohoa@local>` (máy chưa có global config, đã hỏi người dùng).
+2. **Task 2**: trang test kết nối cũ (`page.tsx`) vi phạm luật lint mới của Next 16.3 `react-hooks/set-state-in-effect` (lỗi có sẵn từ scaffold, không phải code mới). Đã xin người dùng và sửa: tách `probeBackends()` thuần async (không setState) + setState chỉ trong callback async, thêm `mounted` guard. Giữ nguyên 100% chức năng.
+3. **Task 4**: đúng như fallback trong Step 8 — build lỗi "Client component import error" khi import `GENRES` từ file `"use client"` vào Footer (server). Đã chuyển `GENRES` sang `src/data/genres.ts`, import từ đó ở cả GenreDropdown và Footer.
+4. **Task 6**: verification = `pnpm lint` + `pnpm build` + dev server (đã chạy sẵn ở port 3000, PID 10944) — curl `/` và `/ket-noi` đều 200 và render đúng nội dung. Checklist visual (hover, auto-rotate, snap-scroll, responsive) còn lại để người dùng xem trên trình duyệt.
+
 **Goal:** Xây dựng nền tảng giao diện WebPhim: design tokens, fonts, shell (header/footer/tab bar) và Trang chủ (hero banner + carousel) với mock data.
 
 **Architecture:** Frontend Next.js 16 App Router ở `frontend/`. Mọi màu sắc/font là token Tailwind 4 (`@theme` trong `globals.css`). Shell gồm `Header` (server) + dropdown/user menu (client nhỏ), `Footer` (server, ẩn mobile), `TabBar` (client, mobile). Trang chủ là server component tổ hợp `HeroBanner` (client, auto-rotate) + `CarouselRow` (client, snap-scroll) + `MovieCard` (poster + hover effects). Dữ liệu từ fixtures local (`src/data/movies.ts`) đúng shape sẽ khớp API tương lai.
