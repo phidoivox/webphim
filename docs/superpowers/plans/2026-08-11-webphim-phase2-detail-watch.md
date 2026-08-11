@@ -1,5 +1,21 @@
 # WebPhim Phase 2 — Trang chi tiết + Trang xem (API Laravel song song) Implementation Plan
 
+## Execution notes (2026-08-11 — đã hoàn thành)
+
+6/6 task xong trên `main` (SDD: subagent per task + task review + fix loops). Commits:
+`e27e84b` seeder (+`18eee0d` fix quality) · `24ee9f7` API (+`bdcd2e4` pint, `8325ab8` plan doc) · `5a4a9d5` data layer · `bd1bb60` detail page (+`e6cbde8` label fix, `738ac48` plan doc) · `c388368` watch page (+`6300d55` ref-in-effect, `e318d51` videoError reset) · cuối: verify + notes.
+
+Điều chỉnh so với plan (đã review, chấp nhận):
+- **Seeder quality**: phim-5/phim-9 = `HD` theo fixture Phase 1 (user ruling — plan ban đầu ghi FHD).
+- **`getMovieDetail`**: fix type 2 token — `const { data: payload } ...; return payload.data;` (bóc wrapper `data` của Laravel resource).
+- **Render gate** trên cả 2 trang: `if (error)` → error UI; `else if (loading || stale)` → skeleton; `stale = movie.slug !== slug` (hook giữ data cũ khi đổi slug — Task 3 minor).
+- **AdSlot**: `onEndedRef.current = onEnded` gán trong dep-less `useEffect` (rule `react-hooks/refs` cấm viết ref lúc render).
+- **PlayerShell**: `setVideoError(false)` trong `onLoadedMetadata` + `onPlaying` (recovery "thử đổi server" — trước đó overlay lỗi không bao giờ biến mất).
+- **Label bookmark**: "Lưu phim" ↔ "Đã lưu" (user ruling copy 100% tiếng Việt).
+- Tinker (psysh) phải dùng FQCN `App\Models\...` — bare class không resolve.
+
+Minors deferred chờ final review: skip AdSlot chưa bắt autoplay ngay; toast "Đã bỏ bookmark" vi phạm copy tiếng Việt; subtitle luôn hiện `servers[0]`; autoplay rejection map chung vào message lỗi server; flash timer không track; `similarMovies()` thiếu `withoutTrashed()`; RatingStars giả định rating finite; hardcode "tap-1" khi không có tập.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Xây trang chi tiết phim `/phim/:slug` và trang xem phim `/xem/:slug/:episode` đọc dữ liệu thật từ endpoint Laravel mới `GET /api/v1/movies/{slug}`, kèm seeder dữ liệu mẫu.
@@ -1541,7 +1557,12 @@ export default function AdSlot({ onEnded }: AdSlotProps) {
   const [dismissed, setDismissed] = useState(false);
   const firedRef = useRef(false);
   const onEndedRef = useRef(onEnded);
-  onEndedRef.current = onEnded;
+
+  // Cập nhật ref callback trong effect (KHÔNG viết ref lúc render — rule react-hooks/refs chặn;
+  // dep-less effect giữ ref luôn fresh, tương đương hành vi)
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  });
 
   useEffect(() => {
     const id = setInterval(() => {
