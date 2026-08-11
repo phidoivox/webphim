@@ -616,8 +616,8 @@ export async function fetchJson<T>(path: string): Promise<ApiResult<T>> {
 }
 
 export async function getMovieDetail(slug: string): Promise<MovieDetail> {
-  const { data } = await fetchJson<{ data: MovieDetail }>(`/v1/movies/${slug}`);
-  return data;
+  const { data: payload } = await fetchJson<{ data: MovieDetail }>(`/v1/movies/${slug}`);
+  return payload.data; // bóc lớp `data` của Laravel resource — wrapper bị giữ lại khi destructure
 }
 ```
 
@@ -1159,7 +1159,7 @@ export default function MovieDetailPage() {
               }`}
             >
               <BookmarkIcon className={`h-4 w-4 ${bookmarked ? "fill-accent" : ""}`} />
-              {bookmarked ? "Đã lưu" : "Bookmark"}
+              {bookmarked ? "Đã lưu" : "Lưu phim"}
             </button>
             {movie.trailerUrl && (
               <a
@@ -1769,7 +1769,7 @@ export default function WatchPage() {
                 }`}
               >
                 <BookmarkIcon className={`h-4 w-4 ${bookmarked ? "fill-accent" : ""}`} />
-                {bookmarked ? "Đã lưu" : "Bookmark"}
+                {bookmarked ? "Đã lưu" : "Lưu phim"}
               </button>
               <button
                 type="button"
