@@ -1,0 +1,663 @@
+{
+  "schema_name": "webphim_database",
+  "version": "3.0.0",
+  "description": "Database schema hoàn chỉnh cho website xem phim trực tuyến — Tối ưu nghiệp vụ, mở rộng, SEO-ready, tương thích OPhim API",
+  "design_principles": {
+    "1_extensibility": "Gộp actors/directors thành people + movie_person với role linh hoạt, dễ mở rộng thêm writer/producer",
+    "2_flexibility": "JSON fields cho data linh hoạt (subtitles, notification data, audit changes)",
+    "3_maintainability": "Soft delete cho data quan trọng, audit_logs cho admin tracking, timestamps đầy đủ",
+    "4_stability": "Foreign keys + cascade, unique constraints, check constraints, composite indexes",
+    "5_scalability": "Denormalized counters + view_logs tách biệt, batch sync strategy cho view_count",
+    "6_seo_ready": "meta_title/description trên movies/genres/countries/tags/collections, slug everywhere, fulltext search"
+  },
+
+  "tables": {
+
+    "users": {
+      "description": "Bảng người dùng (mở rộng từ Laravel mặc định)",
+      "modify": true,
+      "add_columns": {
+        "avatar_url": {
+          "type": "varchar(1000)",
+          "nullable": true,
+          "description": "URL ảnh đại diện"
+        },
+        "role": {
+          "type": "varchar(20)",
+          "nullable": false,
+          "default": "user",
+          "description": "Vai trò: admin / moderator / user"
+        },
+        "subscription_type": {
+          "type": "varchar(20)",
+          "nullable": false,
+          "default": "free",
+          "enum": ["free", "vip", "premium"],
+          "description": "Gói dịch vụ hiện tại"
+        },
+        "subscription_expires_at": {
+          "type": "timestamp",
+          "nullable": true,
+          "description": "Thời điểm hết hạn VIP/Premium"
+        },
+        "is_active": {
+          "type": "boolean",
+          "nullable": false,
+          "default": true,
+          "description": "Trạng thái tài khoản (ban/active)"
+        }
+      },
+      "indexes": [
+        { "name": "users_role_index", "columns": ["role"], "type": "index" },
+        { "name": "users_subscription_type_index", "columns": ["subscription_type"], "type": "index" }
+      ],
+      "relationships": {
+        "ratings": { "type": "hasMany", "related": "ratings", "foreignKey": "user_id" },
+        "bookmarks": { "type": "hasMany", "related": "bookmarks", "foreignKey": "user_id" },
+        "watchHistories": { "type": "hasMany", "related": "watch_histories", "foreignKey": "user_id" },
+        "comments": { "type": "hasMany", "related": "comments", "foreignKey": "user_id" },
+        "notifications": { "type": "hasMany", "related": "notifications", "foreignKey": "notifiable_id" }
+      }
+    },
+
+    "movies": {
+      "description": "Bảng phim — bảng trung tâm của toàn bộ hệ thống",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "parent_id": { "type": "bigint", "nullable": true, "description": "ID phim gốc — dùng cho phim nhiều season (Season 2 -> parent = Season 1)" },
+        "name": { "type": "varchar(500)", "nullable": false, "description": "Tên phim tiếng Việt" },
+        "origin_name": { "type": "varchar(500)", "nullable": true, "description": "Tên gốc (tiếng Anh / bản địa)" },
+        "slug": { "type": "varchar(500)", "nullable": false, "unique": true, "description": "URL slug — dùng cho SEO friendly URL" },
+        "content": { "type": "text", "nullable": true, "description": "Mô tả / tóm tắt nội dung phim" },
+        "type": { "type": "varchar(20)", "nullable": false, "enum": ["single", "series"], "description": "single = phim lẻ, series = phim bộ" },
+        "status": { "type": "varchar(20)", "nullable": false, "default": "ongoing", "enum": ["ongoing", "completed", "trailer"], "description": "Trạng thái phát sóng" },
+        "quality": { "type": "varchar(20)", "nullable": true, "default": "HD", "description": "Chất lượng: CAM, SD, HD, FHD, 4K" },
+        "lang": { "type": "varchar(50)", "nullable": true, "description": "Ngôn ngữ gốc của phim: Tiếng Anh, Tiếng Nhật, Tiếng Hàn..." },
+        "age_rating": { "type": "varchar(10)", "nullable": true, "default": "P", "description": "Phân loại độ tuổi: P, K, 13+, 16+, 18+" },
+        "is_cinema": { "type": "boolean", "nullable": false, "default": false, "description": "Phim chiếu rạp — category quan trọng cho filter" },
+        "thumb_url": { "type": "varchar(1000)", "nullable": true, "description": "URL ảnh thumbnail (tỉ lệ ngang)" },
+        "poster_url": { "type": "varchar(1000)", "nullable": true, "description": "URL poster khổ dọc" },
+        "trailer_url": { "type": "varchar(1000)", "nullable": true, "description": "URL trailer" },
+        "duration": { "type": "varchar(50)", "nullable": true, "description": "Thời lượng hiển thị: '120 phút', '45 phút/tập'" },
+        "duration_minutes": { "type": "smallint", "nullable": true, "description": "Thời lượng dạng số (phút) — dùng cho filter/sort" },
+        "episode_current": { "type": "varchar(50)", "nullable": true, "description": "Tập hiện tại (text): 'Tập 12', 'Hoàn tất 24/24'" },
+        "episode_total": { "type": "varchar(50)", "nullable": true, "description": "Tổng số tập (text): '24 Tập', 'Đang cập nhật'" },
+        "episode_current_num": { "type": "smallint", "nullable": true, "description": "Số tập hiện tại (số) — dùng cho sort/filter" },
+        "episode_total_num": { "type": "smallint", "nullable": true, "description": "Tổng số tập (số) — dùng cho sort/filter" },
+        "notify_schedule": { "type": "varchar(255)", "nullable": true, "description": "Lịch phát sóng phim bộ: 'Thứ 7 hàng tuần'" },
+        "year": { "type": "smallint", "nullable": true, "description": "Năm phát hành" },
+        "imdb_rating": { "type": "decimal(3,1)", "nullable": true, "default": 0.0, "description": "Điểm IMDb gốc (0.0-10.0)" },
+        "tmdb_rating": { "type": "decimal(3,1)", "nullable": true, "default": 0.0, "description": "Điểm TMDb gốc (0.0-10.0)" },
+        "rating_avg": { "type": "decimal(3,1)", "nullable": false, "default": 0.0, "description": "Điểm đánh giá trung bình nội bộ (denormalized)" },
+        "rating_count": { "type": "int", "nullable": false, "default": 0, "description": "Tổng số lượt đánh giá nội bộ (denormalized)" },
+        "view_count": { "type": "bigint", "nullable": false, "default": 0, "description": "Tổng lượt xem (denormalized, sync từ movie_view_logs hoặc Redis)" },
+        "comment_count": { "type": "int", "nullable": false, "default": 0, "description": "Tổng số bình luận (denormalized)" },
+        "is_featured": { "type": "boolean", "nullable": false, "default": false, "description": "Phim nổi bật — hiển thị trên banner trang chủ" },
+        "is_active": { "type": "boolean", "nullable": false, "default": true, "description": "Trạng thái hiển thị (ẩn/hiện)" },
+        "tmdb_id": { "type": "varchar(50)", "nullable": true, "description": "TMDb ID gốc — dùng để đồng bộ, tránh trùng" },
+        "imdb_id": { "type": "varchar(50)", "nullable": true, "description": "IMDb ID gốc — dùng để đồng bộ, tránh trùng" },
+        "source_url": { "type": "varchar(1000)", "nullable": true, "description": "URL nguồn crawl (OPhim, KKPhim...)" },
+        "last_synced_at": { "type": "timestamp", "nullable": true, "description": "Thời điểm đồng bộ dữ liệu gần nhất" },
+        "meta_title": { "type": "varchar(255)", "nullable": true, "description": "Custom SEO title — nếu null thì dùng name" },
+        "meta_description": { "type": "varchar(500)", "nullable": true, "description": "Custom meta description" },
+        "meta_keywords": { "type": "varchar(500)", "nullable": true, "description": "SEO keywords (comma-separated)" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true },
+        "deleted_at": { "type": "timestamp", "nullable": true, "description": "Soft delete" }
+      },
+      "indexes": [
+        { "name": "movies_slug_unique", "columns": ["slug"], "type": "unique" },
+        { "name": "movies_tmdb_id_unique", "columns": ["tmdb_id"], "type": "unique" },
+        { "name": "movies_imdb_id_unique", "columns": ["imdb_id"], "type": "unique" },
+        { "name": "movies_type_index", "columns": ["type"], "type": "index" },
+        { "name": "movies_status_index", "columns": ["status"], "type": "index" },
+        { "name": "movies_year_index", "columns": ["year"], "type": "index" },
+        { "name": "movies_view_count_index", "columns": ["view_count"], "type": "index" },
+        { "name": "movies_is_featured_index", "columns": ["is_featured"], "type": "index" },
+        { "name": "movies_created_at_index", "columns": ["created_at"], "type": "index" },
+        { "name": "movies_is_cinema_index", "columns": ["is_cinema"], "type": "index" },
+        { "name": "movies_active_type_status_index", "columns": ["is_active", "type", "status"], "type": "composite" },
+        { "name": "movies_active_featured_index", "columns": ["is_active", "is_featured"], "type": "composite" },
+        { "name": "movies_fulltext_search", "columns": ["name", "origin_name"], "type": "fulltext" }
+      ],
+      "foreign_keys": [
+        { "column": "parent_id", "references": "id", "on": "movies", "onDelete": "SET NULL" }
+      ],
+      "relationships": {
+        "parent": { "type": "belongsTo", "related": "movies", "foreignKey": "parent_id" },
+        "seasons": { "type": "hasMany", "related": "movies", "foreignKey": "parent_id" },
+        "genres": { "type": "belongsToMany", "related": "genres", "pivot": "movie_genre" },
+        "countries": { "type": "belongsToMany", "related": "countries", "pivot": "movie_country" },
+        "tags": { "type": "belongsToMany", "related": "tags", "pivot": "movie_tag" },
+        "people": { "type": "belongsToMany", "related": "people", "pivot": "movie_person", "pivotColumns": ["role", "character_name", "sort_order"] },
+        "episodes": { "type": "hasMany", "related": "episodes", "foreignKey": "movie_id" },
+        "ratings": { "type": "hasMany", "related": "ratings", "foreignKey": "movie_id" },
+        "bookmarks": { "type": "hasMany", "related": "bookmarks", "foreignKey": "movie_id" },
+        "comments": { "type": "hasMany", "related": "comments", "foreignKey": "movie_id" },
+        "watchHistories": { "type": "hasMany", "related": "watch_histories", "foreignKey": "movie_id" },
+        "viewLogs": { "type": "hasMany", "related": "movie_view_logs", "foreignKey": "movie_id" },
+        "collections": { "type": "belongsToMany", "related": "collections", "pivot": "collection_movie" }
+      }
+    },
+
+    "genres": {
+      "description": "Thể loại phim — Hành động, Tình cảm, Kinh dị...",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "name": { "type": "varchar(100)", "nullable": false, "unique": true },
+        "slug": { "type": "varchar(100)", "nullable": false, "unique": true },
+        "meta_title": { "type": "varchar(255)", "nullable": true, "description": "SEO title cho trang thể loại" },
+        "meta_description": { "type": "varchar(500)", "nullable": true, "description": "SEO description cho trang thể loại" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "relationships": {
+        "movies": { "type": "belongsToMany", "related": "movies", "pivot": "movie_genre" }
+      }
+    },
+
+    "movie_genre": {
+      "description": "Pivot: Phim - Thể loại (N-N)",
+      "columns": {
+        "movie_id": { "type": "bigint", "nullable": false },
+        "genre_id": { "type": "bigint", "nullable": false }
+      },
+      "primary_key": ["movie_id", "genre_id"],
+      "indexes": [
+        { "name": "movie_genre_genre_id_index", "columns": ["genre_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" },
+        { "column": "genre_id", "references": "id", "on": "genres", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "countries": {
+      "description": "Quốc gia sản xuất phim",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "name": { "type": "varchar(100)", "nullable": false, "unique": true },
+        "slug": { "type": "varchar(100)", "nullable": false, "unique": true },
+        "meta_title": { "type": "varchar(255)", "nullable": true, "description": "SEO title cho trang quốc gia" },
+        "meta_description": { "type": "varchar(500)", "nullable": true, "description": "SEO description cho trang quốc gia" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "relationships": {
+        "movies": { "type": "belongsToMany", "related": "movies", "pivot": "movie_country" }
+      }
+    },
+
+    "movie_country": {
+      "description": "Pivot: Phim - Quốc gia (N-N)",
+      "columns": {
+        "movie_id": { "type": "bigint", "nullable": false },
+        "country_id": { "type": "bigint", "nullable": false }
+      },
+      "primary_key": ["movie_id", "country_id"],
+      "indexes": [
+        { "name": "movie_country_country_id_index", "columns": ["country_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" },
+        { "column": "country_id", "references": "id", "on": "countries", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "tags": {
+      "description": "Tags SEO — khác với genres, dùng cho nhóm phim linh hoạt: 'phim Marvel', 'anime mùa hè 2024', 'phim Oscar'",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "name": { "type": "varchar(100)", "nullable": false, "unique": true },
+        "slug": { "type": "varchar(100)", "nullable": false, "unique": true },
+        "description": { "type": "text", "nullable": true, "description": "Mô tả tag — hiển thị trên trang tag" },
+        "meta_title": { "type": "varchar(255)", "nullable": true },
+        "meta_description": { "type": "varchar(500)", "nullable": true },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "relationships": {
+        "movies": { "type": "belongsToMany", "related": "movies", "pivot": "movie_tag" }
+      }
+    },
+
+    "movie_tag": {
+      "description": "Pivot: Phim - Tag (N-N)",
+      "columns": {
+        "movie_id": { "type": "bigint", "nullable": false },
+        "tag_id": { "type": "bigint", "nullable": false }
+      },
+      "primary_key": ["movie_id", "tag_id"],
+      "indexes": [
+        { "name": "movie_tag_tag_id_index", "columns": ["tag_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" },
+        { "column": "tag_id", "references": "id", "on": "tags", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "people": {
+      "description": "Bảng người — gộp actors/directors/writers thành 1 bảng. Một người có thể đóng nhiều vai trò (vừa đạo diễn vừa diễn viên)",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "name": { "type": "varchar(255)", "nullable": false, "description": "Tên chính hiển thị" },
+        "slug": { "type": "varchar(255)", "nullable": false, "unique": true },
+        "other_names": { "type": "varchar(500)", "nullable": true, "description": "Tên gọi khác (biệt danh, tên Hán Việt...)" },
+        "avatar_url": { "type": "varchar(1000)", "nullable": true, "description": "Ảnh đại diện" },
+        "gender": { "type": "varchar(10)", "nullable": true, "enum": ["male", "female", "other"], "description": "Giới tính" },
+        "birthday": { "type": "date", "nullable": true, "description": "Ngày sinh (YYYY-MM-DD)" },
+        "place_of_birth": { "type": "varchar(255)", "nullable": true, "description": "Nơi sinh" },
+        "biography": { "type": "text", "nullable": true, "description": "Tiểu sử ngắn" },
+        "tmdb_id": { "type": "varchar(50)", "nullable": true, "description": "TMDb Person ID — đồng bộ" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "people_slug_unique", "columns": ["slug"], "type": "unique" },
+        { "name": "people_tmdb_id_index", "columns": ["tmdb_id"], "type": "index" },
+        { "name": "people_fulltext_search", "columns": ["name", "other_names"], "type": "fulltext" }
+      ],
+      "relationships": {
+        "movies": { "type": "belongsToMany", "related": "movies", "pivot": "movie_person", "pivotColumns": ["role", "character_name", "sort_order"] }
+      }
+    },
+
+    "movie_person": {
+      "description": "Pivot: Phim - Người (N-N) — với vai trò linh hoạt (actor/director/writer/producer)",
+      "columns": {
+        "movie_id": { "type": "bigint", "nullable": false },
+        "person_id": { "type": "bigint", "nullable": false },
+        "role": {
+          "type": "varchar(20)",
+          "nullable": false,
+          "enum": ["actor", "director", "writer", "producer"],
+          "description": "Vai trò trong phim — mở rộng bằng cách thêm enum value"
+        },
+        "character_name": { "type": "varchar(255)", "nullable": true, "description": "Tên nhân vật (chỉ dùng cho actor)" },
+        "sort_order": { "type": "smallint", "nullable": false, "default": 0, "description": "Thứ tự hiển thị" }
+      },
+      "primary_key": ["movie_id", "person_id", "role"],
+      "indexes": [
+        { "name": "movie_person_person_id_index", "columns": ["person_id"], "type": "index" },
+        { "name": "movie_person_role_index", "columns": ["role"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" },
+        { "column": "person_id", "references": "id", "on": "people", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "episodes": {
+      "description": "Tập phim — mỗi bộ phim có nhiều tập, phim lẻ có 1 tập (Full)",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "name": { "type": "varchar(255)", "nullable": false, "description": "Tên tập: 'Tập 1', 'Full'" },
+        "slug": { "type": "varchar(255)", "nullable": false, "description": "Slug tập: 'tap-1', 'full'" },
+        "sort_order": { "type": "int", "nullable": false, "default": 0, "description": "Thứ tự sắp xếp" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "episodes_movie_slug_unique", "columns": ["movie_id", "slug"], "type": "unique" },
+        { "name": "episodes_movie_id_index", "columns": ["movie_id"], "type": "index" },
+        { "name": "episodes_sort_order_index", "columns": ["movie_id", "sort_order"], "type": "composite" }
+      ],
+      "foreign_keys": [
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" }
+      ],
+      "relationships": {
+        "movie": { "type": "belongsTo", "related": "movies", "foreignKey": "movie_id" },
+        "servers": { "type": "hasMany", "related": "episode_servers", "foreignKey": "episode_id" }
+      }
+    },
+
+    "episode_servers": {
+      "description": "Server phát cho mỗi tập phim — hỗ trợ multi-server, multi-language",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "episode_id": { "type": "bigint", "nullable": false },
+        "server_name": { "type": "varchar(100)", "nullable": false, "description": "Tên server: 'Server VIP 1', 'Server #2'" },
+        "lang_type": { "type": "varchar(20)", "nullable": false, "default": "vietsub", "enum": ["vietsub", "thuyetminh", "longtieng", "engsub", "raw"], "description": "Loại ngôn ngữ/phụ đề" },
+        "link_embed": { "type": "text", "nullable": true, "description": "Link nhúng iframe player" },
+        "link_m3u8": { "type": "text", "nullable": true, "description": "Link stream HLS trực tiếp" },
+        "subtitles": { "type": "json", "nullable": true, "description": "Mảng phụ đề rời [{lang, url, label}]" },
+        "sort_order": { "type": "smallint", "nullable": false, "default": 0, "description": "Thứ tự ưu tiên server" },
+        "is_active": { "type": "boolean", "nullable": false, "default": true, "description": "Server còn hoạt động" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "episode_servers_episode_id_index", "columns": ["episode_id"], "type": "index" },
+        { "name": "episode_servers_episode_lang_index", "columns": ["episode_id", "lang_type"], "type": "composite" }
+      ],
+      "foreign_keys": [
+        { "column": "episode_id", "references": "id", "on": "episodes", "onDelete": "CASCADE" }
+      ],
+      "relationships": {
+        "episode": { "type": "belongsTo", "related": "episodes", "foreignKey": "episode_id" }
+      }
+    },
+
+    "comments": {
+      "description": "Bình luận phim — hỗ trợ nested replies, spoiler marking, moderation",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "user_id": { "type": "bigint", "nullable": false },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "parent_id": { "type": "bigint", "nullable": true, "description": "Reply comment — Adjacency List pattern" },
+        "content": { "type": "text", "nullable": false, "description": "Nội dung bình luận" },
+        "likes_count": { "type": "int", "nullable": false, "default": 0, "description": "Số lượt thích (denormalized)" },
+        "replies_count": { "type": "int", "nullable": false, "default": 0, "description": "Số reply trực tiếp (denormalized)" },
+        "is_pinned": { "type": "boolean", "nullable": false, "default": false, "description": "Ghim comment lên đầu" },
+        "is_spoiler": { "type": "boolean", "nullable": false, "default": false, "description": "Đánh dấu spoiler" },
+        "status": { "type": "varchar(20)", "nullable": false, "default": "active", "enum": ["active", "hidden", "spam"], "description": "Trạng thái moderation" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true },
+        "deleted_at": { "type": "timestamp", "nullable": true, "description": "Soft delete" }
+      },
+      "indexes": [
+        { "name": "comments_movie_id_index", "columns": ["movie_id"], "type": "index" },
+        { "name": "comments_user_id_index", "columns": ["user_id"], "type": "index" },
+        { "name": "comments_parent_id_index", "columns": ["parent_id"], "type": "index" },
+        { "name": "comments_movie_status_created_index", "columns": ["movie_id", "status", "created_at"], "type": "composite" }
+      ],
+      "foreign_keys": [
+        { "column": "user_id", "references": "id", "on": "users", "onDelete": "CASCADE" },
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" },
+        { "column": "parent_id", "references": "id", "on": "comments", "onDelete": "CASCADE" }
+      ],
+      "relationships": {
+        "user": { "type": "belongsTo", "related": "users", "foreignKey": "user_id" },
+        "movie": { "type": "belongsTo", "related": "movies", "foreignKey": "movie_id" },
+        "parent": { "type": "belongsTo", "related": "comments", "foreignKey": "parent_id" },
+        "replies": { "type": "hasMany", "related": "comments", "foreignKey": "parent_id" },
+        "likes": { "type": "hasMany", "related": "comment_likes", "foreignKey": "comment_id" }
+      }
+    },
+
+    "comment_likes": {
+      "description": "Like bình luận — mỗi user chỉ like 1 lần per comment",
+      "columns": {
+        "user_id": { "type": "bigint", "nullable": false },
+        "comment_id": { "type": "bigint", "nullable": false },
+        "created_at": { "type": "timestamp", "nullable": true }
+      },
+      "primary_key": ["user_id", "comment_id"],
+      "indexes": [
+        { "name": "comment_likes_comment_id_index", "columns": ["comment_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "user_id", "references": "id", "on": "users", "onDelete": "CASCADE" },
+        { "column": "comment_id", "references": "id", "on": "comments", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "ratings": {
+      "description": "Đánh giá phim nội bộ (1-10 điểm)",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "user_id": { "type": "bigint", "nullable": false },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "score": { "type": "tinyint", "nullable": false, "check": "score >= 1 AND score <= 10", "description": "Điểm từ 1-10" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "ratings_user_movie_unique", "columns": ["user_id", "movie_id"], "type": "unique" },
+        { "name": "ratings_movie_id_index", "columns": ["movie_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "user_id", "references": "id", "on": "users", "onDelete": "CASCADE" },
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "bookmarks": {
+      "description": "Phim yêu thích, Xem sau & Theo dõi phim bộ",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "user_id": { "type": "bigint", "nullable": false },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "type": { "type": "varchar(20)", "nullable": false, "default": "favorite", "enum": ["favorite", "watchlater", "following"], "description": "favorite = yêu thích, watchlater = xem sau, following = theo dõi phim bộ (nhận thông báo tập mới)" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "bookmarks_user_movie_type_unique", "columns": ["user_id", "movie_id", "type"], "type": "unique" },
+        { "name": "bookmarks_user_type_index", "columns": ["user_id", "type"], "type": "index" },
+        { "name": "bookmarks_movie_id_index", "columns": ["movie_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "user_id", "references": "id", "on": "users", "onDelete": "CASCADE" },
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "watch_histories": {
+      "description": "Lịch sử xem phim — hỗ trợ resume watching (tiếp tục xem từ vị trí dừng)",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "user_id": { "type": "bigint", "nullable": false },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "episode_id": { "type": "bigint", "nullable": true, "description": "Tập đang xem" },
+        "server_id": { "type": "bigint", "nullable": true, "description": "Server đang dùng" },
+        "progress_seconds": { "type": "int", "nullable": false, "default": 0, "description": "Đã xem đến giây thứ mấy" },
+        "duration_seconds": { "type": "int", "nullable": true, "description": "Tổng thời lượng tập (giây)" },
+        "is_completed": { "type": "boolean", "nullable": false, "default": false, "description": "Đã xem hết chưa" },
+        "watched_at": { "type": "timestamp", "nullable": false, "description": "Thời điểm xem gần nhất" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "watch_histories_user_movie_episode_unique", "columns": ["user_id", "movie_id", "episode_id"], "type": "unique" },
+        { "name": "watch_histories_user_watched_index", "columns": ["user_id", "watched_at"], "type": "index" },
+        { "name": "watch_histories_movie_id_index", "columns": ["movie_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "user_id", "references": "id", "on": "users", "onDelete": "CASCADE" },
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" },
+        { "column": "episode_id", "references": "id", "on": "episodes", "onDelete": "SET NULL" },
+        { "column": "server_id", "references": "id", "on": "episode_servers", "onDelete": "SET NULL" }
+      ]
+    },
+
+    "collections": {
+      "description": "Bộ sưu tập phim — do admin quản lý: 'Top 10 phim Hàn 2024', 'Phim Marvel theo timeline'",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "name": { "type": "varchar(255)", "nullable": false },
+        "slug": { "type": "varchar(255)", "nullable": false, "unique": true },
+        "description": { "type": "text", "nullable": true },
+        "thumb_url": { "type": "varchar(1000)", "nullable": true, "description": "Ảnh đại diện bộ sưu tập" },
+        "meta_title": { "type": "varchar(255)", "nullable": true },
+        "meta_description": { "type": "varchar(500)", "nullable": true },
+        "is_active": { "type": "boolean", "nullable": false, "default": true },
+        "sort_order": { "type": "int", "nullable": false, "default": 0 },
+        "created_by": { "type": "bigint", "nullable": true, "description": "Admin tạo" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "collections_slug_unique", "columns": ["slug"], "type": "unique" },
+        { "name": "collections_active_sort_index", "columns": ["is_active", "sort_order"], "type": "composite" }
+      ],
+      "foreign_keys": [
+        { "column": "created_by", "references": "id", "on": "users", "onDelete": "SET NULL" }
+      ],
+      "relationships": {
+        "movies": { "type": "belongsToMany", "related": "movies", "pivot": "collection_movie" },
+        "creator": { "type": "belongsTo", "related": "users", "foreignKey": "created_by" }
+      }
+    },
+
+    "collection_movie": {
+      "description": "Pivot: Bộ sưu tập - Phim (N-N)",
+      "columns": {
+        "collection_id": { "type": "bigint", "nullable": false },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "sort_order": { "type": "int", "nullable": false, "default": 0 }
+      },
+      "primary_key": ["collection_id", "movie_id"],
+      "indexes": [
+        { "name": "collection_movie_movie_id_index", "columns": ["movie_id"], "type": "index" }
+      ],
+      "foreign_keys": [
+        { "column": "collection_id", "references": "id", "on": "collections", "onDelete": "CASCADE" },
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" }
+      ]
+    },
+
+    "episode_reports": {
+      "description": "Báo lỗi phim — user report link chết, lỗi phụ đề, sai tập",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "user_id": { "type": "bigint", "nullable": true, "description": "User báo lỗi (nullable cho guest)" },
+        "episode_id": { "type": "bigint", "nullable": false },
+        "server_id": { "type": "bigint", "nullable": true, "description": "Server bị lỗi" },
+        "report_type": { "type": "varchar(50)", "nullable": false, "enum": ["dead_link", "no_sound", "wrong_sub", "wrong_episode", "low_quality", "other"], "description": "Loại lỗi" },
+        "description": { "type": "text", "nullable": true, "description": "Mô tả chi tiết từ user" },
+        "status": { "type": "varchar(20)", "nullable": false, "default": "pending", "enum": ["pending", "resolved", "dismissed"] },
+        "resolved_by": { "type": "bigint", "nullable": true, "description": "Admin xử lý" },
+        "resolved_at": { "type": "timestamp", "nullable": true },
+        "admin_note": { "type": "text", "nullable": true, "description": "Ghi chú admin" },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "episode_reports_episode_id_index", "columns": ["episode_id"], "type": "index" },
+        { "name": "episode_reports_status_index", "columns": ["status"], "type": "index" },
+        { "name": "episode_reports_status_created_index", "columns": ["status", "created_at"], "type": "composite" }
+      ],
+      "foreign_keys": [
+        { "column": "user_id", "references": "id", "on": "users", "onDelete": "SET NULL" },
+        { "column": "episode_id", "references": "id", "on": "episodes", "onDelete": "CASCADE" },
+        { "column": "server_id", "references": "id", "on": "episode_servers", "onDelete": "SET NULL" },
+        { "column": "resolved_by", "references": "id", "on": "users", "onDelete": "SET NULL" }
+      ]
+    },
+
+    "movie_view_logs": {
+      "description": "Log xem phim chi tiết — analytics, chống bot, tính view_count chính xác",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "movie_id": { "type": "bigint", "nullable": false },
+        "episode_id": { "type": "bigint", "nullable": true },
+        "user_id": { "type": "bigint", "nullable": true, "description": "Null nếu guest" },
+        "ip_address": { "type": "varchar(45)", "nullable": false, "description": "IPv4 hoặc IPv6" },
+        "user_agent": { "type": "varchar(500)", "nullable": true },
+        "viewed_at": { "type": "timestamp", "nullable": false }
+      },
+      "indexes": [
+        { "name": "movie_view_logs_movie_id_index", "columns": ["movie_id"], "type": "index" },
+        { "name": "movie_view_logs_viewed_at_index", "columns": ["viewed_at"], "type": "index" },
+        { "name": "movie_view_logs_movie_date_index", "columns": ["movie_id", "viewed_at"], "type": "composite" },
+        { "name": "movie_view_logs_dedup_index", "columns": ["movie_id", "ip_address", "viewed_at"], "type": "composite" }
+      ],
+      "foreign_keys": [
+        { "column": "movie_id", "references": "id", "on": "movies", "onDelete": "CASCADE" }
+      ],
+      "notes": "Bảng lớn nhanh. Job định kỳ: (1) Aggregate → movies.view_count, (2) Archive/xóa records > 90 ngày"
+    },
+
+    "audit_logs": {
+      "description": "Nhật ký hành động admin — tracking ai sửa/xóa/tạo gì",
+      "columns": {
+        "id": { "type": "bigint", "primary": true, "auto_increment": true },
+        "user_id": { "type": "bigint", "nullable": true, "description": "Admin thực hiện" },
+        "action": { "type": "varchar(50)", "nullable": false, "enum": ["create", "update", "delete", "restore", "login", "logout", "export"] },
+        "model_type": { "type": "varchar(100)", "nullable": false, "description": "Eloquent model: 'movie', 'episode'..." },
+        "model_id": { "type": "bigint", "nullable": true },
+        "changes": { "type": "json", "nullable": true, "description": "{old: {...}, new: {...}}" },
+        "ip_address": { "type": "varchar(45)", "nullable": true },
+        "user_agent": { "type": "varchar(500)", "nullable": true },
+        "created_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "audit_logs_user_id_index", "columns": ["user_id"], "type": "index" },
+        { "name": "audit_logs_model_index", "columns": ["model_type", "model_id"], "type": "composite" },
+        { "name": "audit_logs_created_at_index", "columns": ["created_at"], "type": "index" }
+      ],
+      "notes": "Có thể dùng owen-it/laravel-auditing. Prune records > 6 tháng"
+    },
+
+    "notifications": {
+      "description": "Thông báo — dùng Laravel Notification system (php artisan notifications:table)",
+      "columns": {
+        "id": { "type": "uuid", "primary": true },
+        "type": { "type": "varchar(255)", "nullable": false, "description": "Class: 'new_episode', 'comment_reply'" },
+        "notifiable_type": { "type": "varchar(255)", "nullable": false },
+        "notifiable_id": { "type": "bigint", "nullable": false },
+        "data": { "type": "json", "nullable": false, "description": "Payload JSON" },
+        "read_at": { "type": "timestamp", "nullable": true },
+        "created_at": { "type": "timestamp", "nullable": true },
+        "updated_at": { "type": "timestamp", "nullable": true }
+      },
+      "indexes": [
+        { "name": "notifications_notifiable_index", "columns": ["notifiable_type", "notifiable_id"], "type": "composite" },
+        { "name": "notifications_read_at_index", "columns": ["read_at"], "type": "index" }
+      ],
+      "notes": "Bảng chuẩn Laravel: php artisan notifications:table"
+    }
+  },
+
+  "summary": {
+    "total_tables": 22,
+    "groups": {
+      "user_auth": ["users"],
+      "core_content": ["movies", "episodes", "episode_servers"],
+      "people": ["people", "movie_person"],
+      "classification": ["genres", "movie_genre", "countries", "movie_country", "tags", "movie_tag"],
+      "user_interaction": ["comments", "comment_likes", "ratings", "bookmarks", "watch_histories"],
+      "content_curation": ["collections", "collection_movie"],
+      "operations": ["episode_reports", "movie_view_logs", "audit_logs", "notifications"]
+    },
+    "changes_from_v2": [
+      "MERGED: actors + directors → people + movie_person (1 bảng thay vì 4)",
+      "ADDED: comments + comment_likes (hệ thống bình luận)",
+      "ADDED: tags + movie_tag (SEO tags)",
+      "ADDED: collections + collection_movie (bộ sưu tập)",
+      "ADDED: movie_view_logs (analytics)",
+      "ADDED: audit_logs (admin tracking)",
+      "ADDED: notifications (Laravel built-in)",
+      "IMPROVED: watch_histories (thêm episode_id, progress, resume watching)",
+      "IMPROVED: movies (thêm lang, is_cinema, tmdb_id, imdb_id, SEO fields, comment_count, duration_minutes, episode_*_num)",
+      "IMPROVED: episode_servers (thêm is_active, raw lang_type)",
+      "IMPROVED: episode_reports (thêm description, resolved_by, admin_note, full FK)",
+      "IMPROVED: bookmarks (thêm following type, updated_at)",
+      "IMPROVED: genres/countries (thêm SEO meta fields)",
+      "IMPROVED: Tất cả pivot tables có index trên cột FK thứ 2"
+    ]
+  },
+
+  "migration_order": [
+    "1. users (modify existing)",
+    "2. movies",
+    "3. genres → movie_genre",
+    "4. countries → movie_country",
+    "5. tags → movie_tag",
+    "6. people → movie_person",
+    "7. episodes → episode_servers",
+    "8. comments → comment_likes",
+    "9. ratings",
+    "10. bookmarks",
+    "11. watch_histories",
+    "12. collections → collection_movie",
+    "13. episode_reports",
+    "14. movie_view_logs",
+    "15. audit_logs",
+    "16. notifications"
+  ],
+
+  "extensibility_notes": {
+    "add_new_person_role": "Thêm role mới (writer, producer) chỉ cần thêm enum value vào movie_person.role",
+    "add_new_bookmark_type": "Thêm loại bookmark mới (dropped, plan_to_watch) chỉ cần thêm enum value",
+    "add_new_report_type": "Thêm loại report mới chỉ cần thêm enum value",
+    "add_subscription_tiers": "Thêm gói dịch vụ chỉ cần thêm enum value vào users.subscription_type",
+    "add_payment_system": "Thêm bảng payments/transactions + Laravel Cashier, FK vào users",
+    "add_search_analytics": "Thêm bảng search_logs(id, keyword, user_id, results_count, created_at)",
+    "add_recommendation_engine": "Schema đã có đủ data: genres, tags, watch_histories, ratings, bookmarks",
+    "add_multi_language": "Thêm bảng movie_translations(movie_id, locale, name, content, meta_title, meta_description)"
+  }
+}
