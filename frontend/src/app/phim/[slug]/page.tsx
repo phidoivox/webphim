@@ -162,7 +162,7 @@ export default function MovieDetailPage() {
               }`}
             >
               <BookmarkIcon className={`h-4 w-4 ${bookmarked ? "fill-accent" : ""}`} />
-              {bookmarked ? "Đã lưu" : "Bookmark"}
+              {bookmarked ? "Đã lưu" : "Lưu phim"}
             </button>
             {movie.trailerUrl && (
               <a
