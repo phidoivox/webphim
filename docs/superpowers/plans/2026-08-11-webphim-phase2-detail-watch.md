@@ -16,6 +16,8 @@
 
 Minors deferred chờ final review: skip AdSlot chưa bắt autoplay ngay; toast "Đã bỏ bookmark" vi phạm copy tiếng Việt; subtitle luôn hiện `servers[0]`; autoplay rejection map chung vào message lỗi server; flash timer không track; `similarMovies()` thiếu `withoutTrashed()`; RatingStars giả định rating finite; hardcode "tap-1" khi không có tập.
 
+**Final review (whole branch, opus, sau 6/6 task):** không có Critical, cấu trúc vững — merge sau fix. Fix wave 1 (1 fixer, 2 commits `d5ee1e1` + `3e8217d`): skip AdSlot gọi `onEndedRef` ngay (autoplay tức thì); toast → "Đã lưu phim"/"Đã bỏ lưu" (hết vi phạm ruling tiếng Việt); `similarMovies()` thêm `withoutTrashed()`; +3 test (soft-delete 404, isNew/isHot cả 4 tổ hợp, similar genre/order/limit/loại-trừ-chính-nó) → `composer test` 8/8 (281 assertions), pint sạch, lint 0, build ok. Re-review scoped: 4/4 ADDRESSED, không breakage mới. Minors còn lại (subtitle `servers[0]`, autoplay-rejection message, flash timer, RatingStars, AdSlot replay mỗi tập, fetchJson timeout) → Phase 3+.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Xây trang chi tiết phim `/phim/:slug` và trang xem phim `/xem/:slug/:episode` đọc dữ liệu thật từ endpoint Laravel mới `GET /api/v1/movies/{slug}`, kèm seeder dữ liệu mẫu.
