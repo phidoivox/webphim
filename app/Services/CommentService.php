@@ -145,17 +145,20 @@ class CommentService
                 // Gửi thông báo cho tác giả bình luận cha (nếu không phải tự reply chính mình)
                 $parent = Comment::with('user')->find($parentId);
                 if ($parent && $parent->user && $parent->user_id !== $user->id && $parent->user->is_active) {
-                    $parent->user->notify(new CommentReplyNotification($user, $parent, $comment, $movie));
+                    $parentUser = $parent->user;
+                    defer(function () use ($parentUser, $user, $parent, $comment, $movie) {
+                        $parentUser->notify(new CommentReplyNotification($user, $parent, $comment, $movie));
 
-                    try {
-                        $unread = $parent->user->unreadNotifications()->count();
-                        $latest = $parent->user->notifications()->latest()->first();
-                        if ($latest) {
-                            broadcast(new NotificationSentEvent($parent->user->id, NotificationService::formatNotification($latest), $unread));
+                        try {
+                            $unread = $parentUser->unreadNotifications()->count();
+                            $latest = $parentUser->notifications()->latest()->first();
+                            if ($latest) {
+                                broadcast(new NotificationSentEvent($parentUser->id, NotificationService::formatNotification($latest), $unread));
+                            }
+                        } catch (\Throwable $e) {
+                            Log::error('Broadcast reply error: '.$e->getMessage());
                         }
-                    } catch (\Throwable $e) {
-                        Log::error('Broadcast reply error: '.$e->getMessage());
-                    }
+                    })->always();
                 }
             }
 
@@ -233,17 +236,21 @@ class CommentService
 
                 // Gửi thông báo cho tác giả bình luận khi có lượt thích mới (nếu không phải tự like chính mình)
                 if ($comment->user && $comment->user_id !== $user->id && $comment->user->is_active && $comment->movie) {
-                    $comment->user->notify(new CommentLikeNotification($user, $comment, $comment->movie));
+                    $commentUser = $comment->user;
+                    $commentMovie = $comment->movie;
+                    defer(function () use ($commentUser, $user, $comment, $commentMovie) {
+                        $commentUser->notify(new CommentLikeNotification($user, $comment, $commentMovie));
 
-                    try {
-                        $unread = $comment->user->unreadNotifications()->count();
-                        $latest = $comment->user->notifications()->latest()->first();
-                        if ($latest) {
-                            broadcast(new NotificationSentEvent($comment->user->id, NotificationService::formatNotification($latest), $unread));
+                        try {
+                            $unread = $commentUser->unreadNotifications()->count();
+                            $latest = $commentUser->notifications()->latest()->first();
+                            if ($latest) {
+                                broadcast(new NotificationSentEvent($commentUser->id, NotificationService::formatNotification($latest), $unread));
+                            }
+                        } catch (\Throwable $e) {
+                            Log::error('Broadcast like error: '.$e->getMessage());
                         }
-                    } catch (\Throwable $e) {
-                        Log::error('Broadcast like error: '.$e->getMessage());
-                    }
+                    })->always();
                 }
             }
 

@@ -10,6 +10,7 @@ use App\Http\Resources\Api\V1\PersonSearchResource;
 use App\Services\MovieService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class MovieController extends Controller
 {
@@ -64,12 +65,11 @@ class MovieController extends Controller
         $movieModel = $this->movieService->getMovieDetail($movie);
         $similarMovies = $this->movieService->getSimilarMovies($movieModel);
 
-        // Tăng view count ngầm sau khi HTTP response đã gửi về client (Laravel 11+ defer)
-        if (function_exists('Illuminate\Support\defer')) {
-            \Illuminate\Support\defer(fn () => $this->movieService->incrementViewCount($movieModel))->always();
-        } else {
+        // Tăng view count và ghi log ngầm sau khi HTTP response đã gửi về client
+        defer(function () use ($movieModel, $movie) {
             $this->movieService->incrementViewCount($movieModel);
-        }
+            Log::info("Movie viewed: {$movie}");
+        })->always();
 
         return new MovieDetailResource($movieModel, $similarMovies);
     }
