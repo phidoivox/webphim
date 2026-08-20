@@ -3,20 +3,74 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\MovieFilterRequest;
 use App\Http\Resources\Api\V1\MovieDetailResource;
-use App\Models\Movie;
+use App\Http\Resources\Api\V1\MovieSummaryResource;
+use App\Http\Resources\Api\V1\PersonSearchResource;
+use App\Services\MovieService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class MovieController extends Controller
 {
+    public function __construct(
+        protected MovieService $movieService
+    ) {}
+
+    /**
+     * Danh sách phim có phân trang & bộ lọc.
+     */
+    public function index(MovieFilterRequest $request): JsonResponse
+    {
+        $paginator = $this->movieService->filterMovies(
+            $request->validated(),
+            $request->integer('per_page', 24)
+        );
+
+        return response()->json([
+            'data' => MovieSummaryResource::collection($paginator->items()),
+            'meta' => [
+                'currentPage' => $paginator->currentPage(),
+                'lastPage' => $paginator->lastPage(),
+                'perPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'hasMore' => $paginator->hasMorePages(),
+            ],
+        ]);
+    }
+
+    /**
+     * Tìm kiếm phim và diễn viên theo từ khóa.
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $keyword = (string) $request->query('q', '');
+        $limit = (int) $request->query('limit', 5);
+        $result = $this->movieService->searchAll($keyword, min(max($limit, 1), 30));
+
+        return response()->json([
+            'data' => [
+                'movies' => MovieSummaryResource::collection($result['movies']),
+                'actors' => PersonSearchResource::collection($result['actors']),
+            ],
+        ]);
+    }
+
+    /**
+     * Chi tiết một bộ phim theo slug.
+     */
     public function show(string $movie): MovieDetailResource
     {
-        $movie = Movie::query()
-            ->where('slug', $movie)
-            ->where('is_active', true)
-            ->withoutTrashed()
-            ->with(['genres', 'countries', 'episodes.servers', 'directors', 'actors'])
-            ->firstOrFail(); // ModelNotFoundException → 404 JSON
+        $movieModel = $this->movieService->getMovieDetail($movie);
+        $similarMovies = $this->movieService->getSimilarMovies($movieModel);
 
-        return new MovieDetailResource($movie);
+        // Tăng view count ngầm sau khi HTTP response đã gửi về client (Laravel 11+ defer)
+        if (function_exists('Illuminate\Support\defer')) {
+            \Illuminate\Support\defer(fn () => $this->movieService->incrementViewCount($movieModel))->always();
+        } else {
+            $this->movieService->incrementViewCount($movieModel);
+        }
+
+        return new MovieDetailResource($movieModel, $similarMovies);
     }
 }

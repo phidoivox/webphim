@@ -6,8 +6,27 @@ use App\Models\Movie;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/**
+ * @mixin Movie
+ */
 class MovieDetailResource extends JsonResource
 {
+    /**
+     * Danh sách phim tương tự được truyền từ Service/Controller.
+     */
+    protected mixed $similarMovies;
+
+    public function __construct(mixed $resource, mixed $similarMovies = [])
+    {
+        parent::__construct($resource);
+        $this->similarMovies = $similarMovies;
+    }
+
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
     public function toArray(Request $request): array
     {
         /** @var Movie $movie */
@@ -22,52 +41,89 @@ class MovieDetailResource extends JsonResource
             'posterUrl' => $movie->poster_url,
             'content' => $movie->content,
             'year' => $movie->year,
-            'quality' => $movie->quality,
-            'type' => $movie->type,
-            'status' => $movie->status,
+            'quality' => $movie->quality instanceof \BackedEnum ? $movie->quality->value : $movie->quality,
+            'type' => $movie->type instanceof \BackedEnum ? $movie->type->value : $movie->type,
+            'status' => $movie->status instanceof \BackedEnum ? $movie->status->value : $movie->status,
             'episodeCurrent' => $movie->episode_current,
             'episodeTotal' => $movie->episode_total,
-            'ratingAvg' => $movie->rating_avg,
-            'ratingCount' => $movie->rating_count,
-            'viewCount' => $movie->view_count,
-            'isCinema' => $movie->is_cinema,
-            'isNew' => $movie->created_at->gte(now()->subDays(30)),
-            'isHot' => $movie->view_count >= 10000 || $movie->rating_avg >= 8.5,
+            'ratingAvg' => (float) ($movie->rating_avg ?? 0),
+            'imdbRating' => $movie->imdb_rating > 0 ? (float) $movie->imdb_rating : null,
+            'ratingCount' => (int) ($movie->rating_count ?? 0),
+            'viewCount' => (int) ($movie->view_count ?? 0),
+            'isCinema' => (bool) $movie->is_cinema,
+            'isNew' => $movie->created_at ? $movie->created_at->gte(now()->subDays(30)) : false,
+            'isHot' => ($movie->view_count ?? 0) >= 10000 || ($movie->rating_avg ?? 0) >= 8.5,
             'trailerUrl' => $movie->trailer_url,
+            'lang' => $movie->lang,
             'durationMinutes' => $movie->duration_minutes,
-            'genres' => $movie->genres->pluck('name')->values(),
-            'countries' => $movie->countries->pluck('name')->values(),
-            'episodes' => $movie->episodes
-                ->sortBy('sort_order')
-                ->values()
-                ->map(fn ($ep) => [
-                    'id' => $ep->id,
-                    'name' => $ep->name,
-                    'slug' => $ep->slug,
-                    'servers' => $ep->servers
-                        ->sortBy('sort_order')
-                        ->values()
-                        ->map(fn ($s) => [
-                            'id' => $s->id,
-                            'serverName' => $s->server_name,
-                            'langType' => $s->lang_type,
-                            'linkM3u8' => $s->link_m3u8,
-                        ]),
-                ]),
+            'genres' => $movie->relationLoaded('genres')
+                ? $movie->genres->pluck('name')->values()->all()
+                : [],
+            'countries' => $movie->relationLoaded('countries')
+                ? $movie->countries->pluck('name')->values()->all()
+                : [],
+            'tags' => $movie->relationLoaded('tags')
+                ? $movie->tags->map(fn ($t) => [
+                    'id' => $t->id,
+                    'name' => $t->name,
+                    'slug' => $t->slug,
+                ])->values()->all()
+                : [],
+            'episodes' => $movie->relationLoaded('episodes')
+                ? $movie->episodes
+                    ->map(fn ($ep) => [
+                        'id' => $ep->id,
+                        'name' => $ep->name,
+                        'slug' => $ep->slug,
+                        'servers' => $ep->relationLoaded('servers')
+                            ? $ep->servers
+                                ->map(fn ($s) => [
+                                    'id' => $s->id,
+                                    'serverName' => $s->server_name,
+                                    'langType' => $s->lang_type instanceof \BackedEnum ? $s->lang_type->value : $s->lang_type,
+                                    'linkM3u8' => $s->link_m3u8,
+                                ])
+                                ->values()
+                                ->all()
+                            : [],
+                    ])
+                    ->values()
+                    ->all()
+                : [],
             'credits' => [
-                'directors' => $movie->directors
-                    ->sortBy(fn ($p) => $p->pivot->sort_order)
-                    ->values()
-                    ->map(fn ($p) => $this->credit($p)),
-                'actors' => $movie->actors
-                    ->sortBy(fn ($p) => $p->pivot->sort_order)
-                    ->values()
-                    ->map(fn ($p) => [
-                        ...$this->credit($p),
-                        'characterName' => $p->pivot->character_name,
-                    ]),
+                'directors' => $movie->relationLoaded('directors')
+                    ? $movie->directors
+                        ->sortBy(fn ($p) => $p->pivot->sort_order ?? 0)
+                        ->values()
+                        ->map(fn ($p) => $this->credit($p))
+                        ->all()
+                    : [],
+                'actors' => $movie->relationLoaded('actors')
+                    ? $movie->actors
+                        ->sortBy(fn ($p) => $p->pivot->sort_order ?? 0)
+                        ->values()
+                        ->map(fn ($p) => [
+                            ...$this->credit($p),
+                            'characterName' => $p->pivot->character_name ?? null,
+                        ])
+                        ->all()
+                    : [],
             ],
-            'similar' => $this->similarMovies($movie),
+            'gallery' => $movie->relationLoaded('galleries')
+                ? $movie->galleries
+                    ->map(fn ($item) => [
+                        'id' => $item->id,
+                        'mediaType' => $item->media_type,
+                        'type' => $item->type,
+                        'url' => $item->url,
+                        'thumbUrl' => $item->thumb_url,
+                        'caption' => $item->caption,
+                        'durationSeconds' => $item->duration_seconds,
+                    ])
+                    ->values()
+                    ->all()
+                : [],
+            'similar' => MovieSummaryResource::collection($this->similarMovies)->resolve(),
         ];
     }
 
@@ -78,38 +134,5 @@ class MovieDetailResource extends JsonResource
             'name' => $person->name,
             'avatarUrl' => $person->avatar_url,
         ];
-    }
-
-    /** Phim cùng thể loại — shape giống MovieSummary frontend (Phase 1). */
-    private function similarMovies(Movie $movie): array
-    {
-        return Movie::query()
-            ->whereKeyNot($movie->id)
-            ->where('is_active', true)
-            ->withoutTrashed()
-            ->whereHas('genres', fn ($q) => $q->whereIn('genres.id', $movie->genres->pluck('id')))
-            ->with('genres')
-            ->orderByDesc('rating_avg')
-            ->limit(10)
-            ->get()
-            ->map(fn ($m) => [
-                'id' => $m->id,
-                'slug' => $m->slug,
-                'name' => $m->name,
-                'originName' => $m->origin_name,
-                'thumbUrl' => $m->thumb_url,
-                'posterUrl' => $m->poster_url,
-                'year' => $m->year,
-                'quality' => $m->quality,
-                'type' => $m->type,
-                'episodeCurrent' => $m->episode_current,
-                'episodeTotal' => $m->episode_total,
-                'isNew' => $m->created_at->gte(now()->subDays(30)),
-                'isHot' => $m->view_count >= 10000 || $m->rating_avg >= 8.5,
-                'ratingAvg' => $m->rating_avg,
-                'genres' => $m->genres->pluck('name')->values(),
-            ])
-            ->values()
-            ->all();
     }
 }

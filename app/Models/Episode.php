@@ -25,6 +25,6 @@ class Episode extends Model
 
     public function servers(): HasMany
     {
-        return $this->hasMany(EpisodeServer::class);
+        return $this->hasMany(EpisodeServer::class)->orderBy('sort_order');
     }
 }

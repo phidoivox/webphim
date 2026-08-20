@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Models\Movie;
+use Database\Seeders\MovieTestSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -12,7 +13,7 @@ class MovieDetailTest extends TestCase
 
     public function test_movie_detail_returns_full_json(): void
     {
-        $this->seed();
+        $this->seed(MovieTestSeeder::class);
 
         $response = $this->getJson('/api/v1/movies/phim-1');
 
@@ -32,21 +33,37 @@ class MovieDetailTest extends TestCase
                     'directors' => ['*' => ['id', 'name', 'avatarUrl']],
                     'actors' => ['*' => ['id', 'name', 'avatarUrl', 'characterName']],
                 ],
+                'gallery' => ['*' => ['id', 'mediaType', 'type', 'url', 'thumbUrl', 'caption', 'durationSeconds']],
                 'similar' => ['*' => ['id', 'slug', 'name', 'thumbUrl', 'year', 'quality', 'type', 'ratingAvg', 'genres']],
             ],
         ]);
     }
 
+    public function test_movie_detail_includes_gallery_media(): void
+    {
+        $this->seed(MovieTestSeeder::class);
+
+        $response = $this->getJson('/api/v1/movies/phim-1');
+
+        $response->assertOk();
+        $response->assertJsonCount(5, 'data.gallery');
+        $response->assertJsonPath('data.gallery.0.mediaType', 'video');
+        $response->assertJsonPath('data.gallery.0.type', 'trailer');
+        $response->assertJsonPath('data.gallery.0.durationSeconds', 135);
+        $response->assertJsonPath('data.gallery.2.mediaType', 'image');
+        $response->assertJsonPath('data.gallery.2.type', 'still');
+    }
+
     public function test_unknown_slug_returns_404(): void
     {
-        $this->seed();
+        $this->seed(MovieTestSeeder::class);
 
         $this->getJson('/api/v1/movies/phim-999')->assertNotFound();
     }
 
     public function test_single_movie_has_one_full_episode(): void
     {
-        $this->seed();
+        $this->seed(MovieTestSeeder::class);
 
         $response = $this->getJson('/api/v1/movies/phim-2');
 
@@ -57,7 +74,7 @@ class MovieDetailTest extends TestCase
 
     public function test_soft_deleted_movie_returns_404(): void
     {
-        $this->seed();
+        $this->seed(MovieTestSeeder::class);
 
         Movie::query()->where('slug', 'phim-8')->firstOrFail()->delete();
 
@@ -66,7 +83,7 @@ class MovieDetailTest extends TestCase
 
     public function test_is_new_and_is_hot_are_computed(): void
     {
-        $this->seed();
+        $this->seed(MovieTestSeeder::class);
 
         // phim-4: created 5 ngày trước → isNew=true; 3500 lượt xem, rating 7.9 → isHot=false
         $response = $this->getJson('/api/v1/movies/phim-4');
@@ -89,7 +106,7 @@ class MovieDetailTest extends TestCase
 
     public function test_similar_movies_contract(): void
     {
-        $this->seed();
+        $this->seed(MovieTestSeeder::class);
 
         $response = $this->getJson('/api/v1/movies/phim-1');
         $response->assertOk();

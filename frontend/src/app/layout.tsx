@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
-import TabBar from "@/components/layout/TabBar";
+import { Suspense } from "react";
+import AppShell from "@/components/layout/AppShell";
+import { AuthProvider } from "@/context/AuthContext";
+import { BookmarkProvider } from "@/context/BookmarkContext";
+import { NotificationProvider } from "@/context/NotificationContext";
+import { QueryProvider } from "@/context/QueryProvider";
+import { Toaster } from "sonner";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -16,15 +20,24 @@ export const metadata: Metadata = {
     "Xem phim bộ, phim lẻ chất lượng cao miễn phí — cập nhật phim mới mỗi ngày.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi" className={`${spaceGrotesk.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-base font-sans text-ink">
-        <Header />
-        <main className="flex-1 pb-14 lg:pb-0">{children}</main>
-        <Footer />
-        <TabBar />
+        <QueryProvider>
+          <AuthProvider>
+            <NotificationProvider>
+              <BookmarkProvider>
+                <Suspense>
+                  <AppShell>{children}</AppShell>
+                </Suspense>
+              </BookmarkProvider>
+            </NotificationProvider>
+          </AuthProvider>
+          <Toaster richColors position="top-right" theme="dark" />
+        </QueryProvider>
       </body>
     </html>
   );
 }
+

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ServerLangType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,7 @@ class EpisodeServer extends Model
     protected function casts(): array
     {
         return [
+            'lang_type' => ServerLangType::class,
             'subtitles' => 'array',
             'is_active' => 'boolean',
         ];
