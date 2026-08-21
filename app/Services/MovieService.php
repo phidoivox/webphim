@@ -173,13 +173,33 @@ class MovieService
     }
 
     /**
-     * Lấy thông tin chi tiết một bộ phim theo slug (SWR via Cache::flexible).
+     * Lấy thông tin chi tiết một bộ phim theo slug (SWR via Cache::flexible với fallback an toàn).
      *
      * @throws ModelNotFoundException
      */
     public function getMovieDetail(string $slug): Movie
     {
-        return Cache::flexible("movie:{$slug}", [300, 600], fn () => Movie::query()
+        try {
+            $cached = Cache::flexible("movie:{$slug}", [300, 600], fn () => $this->fetchMovieDetailQuery($slug));
+
+            if ($cached instanceof Movie) {
+                return $cached;
+            }
+        } catch (\Throwable) {
+            // Bỏ qua lỗi deserialize từ cache (ví dụ __PHP_Incomplete_Class) và load trực tiếp từ DB
+        }
+
+        Cache::forget("movie:{$slug}");
+
+        return $this->fetchMovieDetailQuery($slug);
+    }
+
+    /**
+     * Query chi tiết phim cùng các quan hệ liên quan từ cơ sở dữ liệu.
+     */
+    public function fetchMovieDetailQuery(string $slug): Movie
+    {
+        return Movie::query()
             ->where('slug', $slug)
             ->active()
             ->with([
@@ -191,8 +211,7 @@ class MovieService
                 'actors',
                 'galleries',
             ])
-            ->firstOrFail()
-        );
+            ->firstOrFail();
     }
 
     /**
