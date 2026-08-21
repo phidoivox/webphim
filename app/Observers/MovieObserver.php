@@ -14,6 +14,25 @@ class MovieObserver
      */
     public function saved(Movie $movie): void
     {
+        // Bỏ qua nếu chỉ cập nhật lượt xem (view_count), đánh giá phụ hoặc timestamp
+        if (! $movie->wasRecentlyCreated) {
+            $changedAttributes = array_keys($movie->getChanges());
+            $ignorableAttributes = [
+                'view_count',
+                'updated_at',
+                'rating_avg',
+                'rating_count',
+                'tmdb_rating',
+                'imdb_rating',
+                'tmdb_vote_count',
+            ];
+            $meaningfulChanges = array_diff($changedAttributes, $ignorableAttributes);
+
+            if (empty($meaningfulChanges)) {
+                return;
+            }
+        }
+
         $this->invalidateCache($movie);
     }
 
@@ -57,6 +76,10 @@ class MovieObserver
         // Asynchronously notify Next.js on-demand cache revalidation via defer()
         $slug = $movie->slug;
         defer(function () use ($slug) {
+            if (app()->environment('testing')) {
+                return;
+            }
+
             try {
                 $frontendUrl = rtrim(config('services.frontend.url', env('FRONTEND_URL', 'http://localhost:3000')), '/');
                 $secret = env('REVALIDATION_SECRET', 'webphim_secret_revalidate_2026');
