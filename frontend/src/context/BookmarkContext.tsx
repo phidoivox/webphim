@@ -184,8 +184,20 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
 
   // Initial load
   useEffect(() => {
-    void refreshBookmarks();
-  }, [refreshBookmarks]);
+    let ignore = false;
+    if (isAuthenticated && token) {
+      void (async () => {
+        if (!ignore) {
+          await refreshBookmarks();
+        }
+      })();
+    } else {
+      setLoading(false);
+    }
+    return () => {
+      ignore = true;
+    };
+  }, [isAuthenticated, token, refreshBookmarks]);
 
   // Tự động gộp tủ phim Khách lên Cloud khi Đăng nhập
   useEffect(() => {

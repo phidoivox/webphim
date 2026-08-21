@@ -1190,7 +1190,7 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
 
               {isSeries && (
                 <p className="text-[11px] text-slate-400 bg-white/[0.02] p-2 rounded-lg border border-white/5">
-                  💡 <strong>Tập hiện tại:</strong> Hệ thống sẽ tự động cập nhật theo số lượng tập thực tế bạn thêm trong tab <em>"2. Tập Phim & Nguồn Video"</em>.
+                  💡 <strong>Tập hiện tại:</strong> Hệ thống sẽ tự động cập nhật theo số lượng tập thực tế bạn thêm trong tab <em>&quot;2. Tập Phim &amp; Nguồn Video&quot;</em>.
                 </p>
               )}
             </div>

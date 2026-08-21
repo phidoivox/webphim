@@ -19,22 +19,22 @@ interface AdminContextType {
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("wp_admin_sidebar_collapsed");
+        if (saved !== null) {
+          return saved === "true";
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return false;
+  });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
   const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
-
-  // Load sidebar collapsed state from localStorage after mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("wp_admin_sidebar_collapsed");
-      if (saved !== null) {
-        setIsCollapsed(saved === "true");
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
 
   // Save sidebar collapsed state to localStorage
   const handleSetIsCollapsed: React.Dispatch<React.SetStateAction<boolean>> = (

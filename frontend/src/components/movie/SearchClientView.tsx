@@ -4,7 +4,6 @@ import { useState } from "react";
 import MovieCard from "@/components/movie/MovieCard";
 import AdvancedFilterPanel from "@/components/movie/AdvancedFilterPanel";
 import Pagination from "@/components/ui/Pagination";
-import { SlidersIcon } from "@/components/ui/icons";
 import type { MovieSummary, PaginationMeta } from "@/types/movie";
 
 interface SearchClientViewProps {

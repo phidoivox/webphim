@@ -153,3 +153,113 @@ export interface AdminReportItem {
   createdAt: string;
   resolvedAt: string | null;
 }
+
+export interface AdminPaginationMeta {
+  currentPage: number;
+  lastPage: number;
+  perPage: number;
+  total: number;
+  hasMore?: boolean;
+  counts?: AdminMovieMetaCounts;
+}
+
+export interface AdminTaxonomyGenre {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  movies_count?: number;
+}
+
+export interface AdminTaxonomyCountry {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  movies_count?: number;
+}
+
+export interface AdminTaxonomyPerson {
+  id: number;
+  name: string;
+  slug?: string;
+  avatar_url?: string | null;
+  bio?: string | null;
+}
+
+export interface AdminMovieDetail extends AdminMovieListItem {
+  content?: string | null;
+  trailerUrl?: string | null;
+  durationMinutes?: number | null;
+  ageRating?: string | null;
+  lang?: string | null;
+  notifySchedule?: string | null;
+  scheduleDayOfWeek?: number | null;
+  episodes?: AdminEpisodeItem[];
+  directors?: AdminTaxonomyPerson[];
+  actors?: Array<AdminTaxonomyPerson & { characterName?: string; sortOrder?: number }>;
+  tags?: Array<{ id: number; name: string; slug: string }>;
+}
+
+export interface AdminMoviePayload {
+  name: string;
+  origin_name?: string | null;
+  slug?: string;
+  content?: string | null;
+  type: 'single' | 'series' | 'tv-show';
+  status: 'ongoing' | 'completed' | 'trailer';
+  quality?: string;
+  lang?: string;
+  year?: number | null;
+  duration_minutes?: number | null;
+  is_cinema?: boolean;
+  is_featured?: boolean;
+  is_active?: boolean;
+  thumb_url?: string | null;
+  poster_url?: string | null;
+  trailer_url?: string | null;
+  genre_ids?: number[];
+  country_ids?: number[];
+  tag_ids?: number[];
+  [key: string]: unknown;
+}
+
+export interface AdminEpisodePayload {
+  name: string;
+  slug: string;
+  sort_order?: number;
+  movie_id?: number;
+  [key: string]: unknown;
+}
+
+export interface AdminEpisodeServerPayload {
+  server_name: string;
+  lang_type: string;
+  link_m3u8?: string | null;
+  link_embed?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+  [key: string]: unknown;
+}
+
+export interface AdminUserPayload {
+  name?: string;
+  email?: string;
+  role?: 'admin' | 'moderator' | 'user';
+  is_active?: boolean;
+  [key: string]: unknown;
+}
+
+export interface AdminReportPayload {
+  status?: 'pending' | 'resolved' | 'rejected';
+  admin_note?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AdminTaxonomyPayload {
+  name: string;
+  slug?: string;
+  description?: string | null;
+  [key: string]: unknown;
+}
+

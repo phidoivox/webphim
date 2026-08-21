@@ -4,7 +4,6 @@ import React, { useState, useOptimistic, startTransition } from "react";
 import {
   AlertTriangleIcon,
   CheckIcon,
-  CornerDownRightIcon,
   EyeIcon,
   EyeOffIcon,
   HeartIcon,
@@ -23,10 +22,10 @@ import CommentForm from "./comments/CommentForm";
 
 interface CommentItemProps {
   comment: CommentItemType;
-  onLike: (commentId: number) => Promise<any>;
-  onReply: (payload: PostCommentPayload) => Promise<any>;
-  onEdit: (commentId: number, payload: UpdateCommentPayload) => Promise<any>;
-  onDelete: (commentId: number, parentId?: number | null) => Promise<any>;
+  onLike: (commentId: number) => Promise<unknown>;
+  onReply: (payload: PostCommentPayload) => Promise<unknown>;
+  onEdit: (commentId: number, payload: UpdateCommentPayload) => Promise<unknown>;
+  onDelete: (commentId: number, parentId?: number | null) => Promise<unknown>;
   isReply?: boolean;
 }
 
@@ -99,8 +98,8 @@ export default function CommentItem({
     try {
       await onEdit(comment.id, { content: trimmed });
       setIsEditing(false);
-    } catch (err: any) {
-      setEditError(err.message || "Lỗi khi lưu chỉnh sửa.");
+    } catch (err: unknown) {
+      setEditError((err as Error).message || "Lỗi khi lưu chỉnh sửa.");
     } finally {
       setIsSavingEdit(false);
     }

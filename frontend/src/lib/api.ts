@@ -39,13 +39,10 @@ import type {
 import type {
   BroadcastNotificationPayload,
   BroadcastNotificationResponse,
-  NotificationItem,
   NotificationListResponse,
   UnreadCountResponse,
 } from "@/types/notification";
 import type {
-  ScheduleMovieItem,
-  WeeklyScheduleData,
   WeeklyScheduleResponse,
 } from "@/types/schedule";
 
@@ -532,10 +529,20 @@ import type {
   AdminBulkActionType,
   AdminDashboardData,
   AdminEpisodeItem,
+  AdminEpisodePayload,
+  AdminEpisodeServerPayload,
+  AdminMovieDetail,
   AdminMovieListItem,
   AdminMovieMetaCounts,
+  AdminMoviePayload,
+  AdminPaginationMeta,
   AdminReportItem,
+  AdminReportPayload,
+  AdminTaxonomyCountry,
+  AdminTaxonomyGenre,
+  AdminTaxonomyPayload,
   AdminUserItem,
+  AdminUserPayload,
   ViewsTimeseriesPoint,
 } from "@/types/admin";
 
@@ -555,43 +562,43 @@ export async function getAdminMoviesApi(
     if (val !== undefined && val !== "") query.set(key, String(val));
   });
   const qs = query.toString() ? `?${query.toString()}` : "";
-  return sendRequest<{ data: AdminMovieListItem[]; meta: any }>(`/v1/admin/movies${qs}`, {
+  return sendRequest<{ data: AdminMovieListItem[]; meta: AdminPaginationMeta }>(`/v1/admin/movies${qs}`, {
     token,
   });
 }
 
-export async function getAdminMovieDetailApi(id: number | string, token?: string | null): Promise<any> {
-  const res = await sendRequest<{ status: string; data: any }>(`/v1/admin/movies/${id}`, {
+export async function getAdminMovieDetailApi(id: number | string, token?: string | null): Promise<AdminMovieDetail> {
+  const res = await sendRequest<{ status: string; data: AdminMovieDetail }>(`/v1/admin/movies/${id}`, {
     token,
   });
   return res.data;
 }
 
-export async function createAdminMovieApi(payload: any, token?: string | null): Promise<any> {
-  return sendRequest<{ status: string; message: string; data: any }>("/v1/admin/movies", {
+export async function createAdminMovieApi(payload: AdminMoviePayload, token?: string | null): Promise<{ status: string; message: string; data: AdminMovieDetail }> {
+  return sendRequest<{ status: string; message: string; data: AdminMovieDetail }>("/v1/admin/movies", {
     method: "POST",
     body: payload,
     token,
   });
 }
 
-export async function updateAdminMovieApi(id: number | string, payload: any, token?: string | null): Promise<any> {
-  return sendRequest<{ status: string; message: string; data: any }>(`/v1/admin/movies/${id}`, {
+export async function updateAdminMovieApi(id: number | string, payload: AdminMoviePayload, token?: string | null): Promise<{ status: string; message: string; data: AdminMovieDetail }> {
+  return sendRequest<{ status: string; message: string; data: AdminMovieDetail }>(`/v1/admin/movies/${id}`, {
     method: "PUT",
     body: payload,
     token,
   });
 }
 
-export async function deleteAdminMovieApi(id: number | string, token?: string | null): Promise<any> {
+export async function deleteAdminMovieApi(id: number | string, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest<{ status: string; message: string }>(`/v1/admin/movies/${id}`, {
     method: "DELETE",
     token,
   });
 }
 
-export async function toggleAdminMovieApi(id: number | string, field: 'is_active' | 'is_featured' | 'is_cinema', token?: string | null): Promise<any> {
-  return sendRequest<{ status: string; message: string; data: any }>(`/v1/admin/movies/${id}/toggle`, {
+export async function toggleAdminMovieApi(id: number | string, field: 'is_active' | 'is_featured' | 'is_cinema', token?: string | null): Promise<{ status: string; message: string; data: AdminMovieListItem }> {
+  return sendRequest<{ status: string; message: string; data: AdminMovieListItem }>(`/v1/admin/movies/${id}/toggle`, {
     method: "PATCH",
     body: { field },
     token,
@@ -609,75 +616,75 @@ export async function bulkAdminMoviesApi(
   });
 }
 
-export async function getAdminEpisodesApi(movieId: number | string, token?: string | null): Promise<{ movie: any; episodes: AdminEpisodeItem[] }> {
-  const res = await sendRequest<{ status: string; data: { movie: any; episodes: AdminEpisodeItem[] } }>(
+export async function getAdminEpisodesApi(movieId: number | string, token?: string | null): Promise<{ movie: { id: number; name: string; slug: string }; episodes: AdminEpisodeItem[] }> {
+  const res = await sendRequest<{ status: string; data: { movie: { id: number; name: string; slug: string }; episodes: AdminEpisodeItem[] } }>(
     `/v1/admin/movies/${movieId}/episodes`,
     { token }
   );
   return res.data;
 }
 
-export async function createAdminEpisodeApi(movieId: number | string, payload: any, token?: string | null): Promise<any> {
-  return sendRequest<{ status: string; message: string; data: any }>(`/v1/admin/movies/${movieId}/episodes`, {
+export async function createAdminEpisodeApi(movieId: number | string, payload: AdminEpisodePayload, token?: string | null): Promise<{ status: string; message: string; data: AdminEpisodeItem }> {
+  return sendRequest<{ status: string; message: string; data: AdminEpisodeItem }>(`/v1/admin/movies/${movieId}/episodes`, {
     method: "POST",
     body: payload,
     token,
   });
 }
 
-export async function updateAdminEpisodeApi(id: number | string, payload: any, token?: string | null): Promise<any> {
-  return sendRequest<{ status: string; message: string; data: any }>(`/v1/admin/episodes/${id}`, {
+export async function updateAdminEpisodeApi(id: number | string, payload: AdminEpisodePayload | AdminEpisodeServerPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminEpisodeItem }> {
+  return sendRequest<{ status: string; message: string; data: AdminEpisodeItem }>(`/v1/admin/episodes/${id}`, {
     method: "PUT",
     body: payload,
     token,
   });
 }
 
-export async function deleteAdminEpisodeApi(id: number | string, token?: string | null): Promise<any> {
+export async function deleteAdminEpisodeApi(id: number | string, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest<{ status: string; message: string }>(`/v1/admin/episodes/${id}`, {
     method: "DELETE",
     token,
   });
 }
 
-export async function getAdminTaxonomyGenresApi(token?: string | null): Promise<any[]> {
-  const res = await sendRequest<{ status: string; data: any[] }>("/v1/admin/genres", { token });
+export async function getAdminTaxonomyGenresApi(token?: string | null): Promise<AdminTaxonomyGenre[]> {
+  const res = await sendRequest<{ status: string; data: AdminTaxonomyGenre[] }>("/v1/admin/genres", { token });
   return res.data;
 }
 
-export async function createAdminTaxonomyGenreApi(payload: any, token?: string | null): Promise<any> {
+export async function createAdminTaxonomyGenreApi(payload: AdminTaxonomyPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminTaxonomyGenre }> {
   return sendRequest("/v1/admin/genres", { method: "POST", body: payload, token });
 }
 
-export async function updateAdminTaxonomyGenreApi(id: number, payload: any, token?: string | null): Promise<any> {
+export async function updateAdminTaxonomyGenreApi(id: number, payload: AdminTaxonomyPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminTaxonomyGenre }> {
   return sendRequest(`/v1/admin/genres/${id}`, { method: "PUT", body: payload, token });
 }
 
-export async function deleteAdminTaxonomyGenreApi(id: number, token?: string | null): Promise<any> {
+export async function deleteAdminTaxonomyGenreApi(id: number, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest(`/v1/admin/genres/${id}`, { method: "DELETE", token });
 }
 
-export async function getAdminTaxonomyCountriesApi(token?: string | null): Promise<any[]> {
-  const res = await sendRequest<{ status: string; data: any[] }>("/v1/admin/countries", { token });
+export async function getAdminTaxonomyCountriesApi(token?: string | null): Promise<AdminTaxonomyCountry[]> {
+  const res = await sendRequest<{ status: string; data: AdminTaxonomyCountry[] }>("/v1/admin/countries", { token });
   return res.data;
 }
 
-export async function createAdminTaxonomyCountryApi(payload: any, token?: string | null): Promise<any> {
+export async function createAdminTaxonomyCountryApi(payload: AdminTaxonomyPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminTaxonomyCountry }> {
   return sendRequest("/v1/admin/countries", { method: "POST", body: payload, token });
 }
 
-export async function updateAdminTaxonomyCountryApi(id: number, payload: any, token?: string | null): Promise<any> {
+export async function updateAdminTaxonomyCountryApi(id: number, payload: AdminTaxonomyPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminTaxonomyCountry }> {
   return sendRequest(`/v1/admin/countries/${id}`, { method: "PUT", body: payload, token });
 }
 
-export async function deleteAdminTaxonomyCountryApi(id: number, token?: string | null): Promise<any> {
+export async function deleteAdminTaxonomyCountryApi(id: number, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest(`/v1/admin/countries/${id}`, { method: "DELETE", token });
 }
 
 export async function getAdminUsersApi(
   params: Record<string, string | number | undefined> = {},
   token?: string | null
-): Promise<{ data: AdminUserItem[]; meta: any }> {
+): Promise<{ data: AdminUserItem[]; meta: AdminPaginationMeta }> {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, val]) => {
     if (val !== undefined && val !== "") query.set(key, String(val));
@@ -686,18 +693,18 @@ export async function getAdminUsersApi(
   return sendRequest(`/v1/admin/users${qs}`, { token });
 }
 
-export async function updateAdminUserApi(id: number, payload: any, token?: string | null): Promise<any> {
+export async function updateAdminUserApi(id: number, payload: AdminUserPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminUserItem }> {
   return sendRequest(`/v1/admin/users/${id}`, { method: "PUT", body: payload, token });
 }
 
-export async function deleteAdminUserApi(id: number, token?: string | null): Promise<any> {
+export async function deleteAdminUserApi(id: number, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest(`/v1/admin/users/${id}`, { method: "DELETE", token });
 }
 
 export async function getAdminReportsApi(
   params: Record<string, string | undefined> = {},
   token?: string | null
-): Promise<{ data: AdminReportItem[]; meta: any }> {
+): Promise<{ data: AdminReportItem[]; meta: AdminPaginationMeta }> {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, val]) => {
     if (val !== undefined && val !== "") query.set(key, String(val));
@@ -706,11 +713,11 @@ export async function getAdminReportsApi(
   return sendRequest(`/v1/admin/reports${qs}`, { token });
 }
 
-export async function updateAdminReportApi(id: number, payload: any, token?: string | null): Promise<any> {
+export async function updateAdminReportApi(id: number, payload: AdminReportPayload, token?: string | null): Promise<{ status: string; message: string; data: AdminReportItem }> {
   return sendRequest(`/v1/admin/reports/${id}`, { method: "PUT", body: payload, token });
 }
 
-export async function deleteAdminReportApi(id: number, token?: string | null): Promise<any> {
+export async function deleteAdminReportApi(id: number, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest(`/v1/admin/reports/${id}`, { method: "DELETE", token });
 }
 
@@ -809,13 +816,13 @@ export async function toggleCommentLikeApi(
 export async function getAdminCommentsApi(
   params: Record<string, string | number | boolean | undefined> = {},
   token?: string | null
-): Promise<{ data: CommentItem[]; meta: any }> {
+): Promise<{ data: CommentItem[]; meta: AdminPaginationMeta }> {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, val]) => {
     if (val !== undefined && val !== "") query.set(key, String(val));
   });
   const qs = query.toString() ? `?${query.toString()}` : "";
-  return sendRequest<{ data: CommentItem[]; meta: any }>(`/v1/admin/comments${qs}`, {
+  return sendRequest<{ data: CommentItem[]; meta: AdminPaginationMeta }>(`/v1/admin/comments${qs}`, {
     token,
   });
 }

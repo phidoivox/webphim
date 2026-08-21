@@ -167,7 +167,7 @@ export default function AdminDashboardPage() {
   const activePercentage = useMemo(() => {
     if (!data?.kpis?.totalMovies) return 100;
     return Math.round((data.kpis.activeMovies / data.kpis.totalMovies) * 100);
-  }, [data?.kpis]);
+  }, [data]);
 
   return (
     <>

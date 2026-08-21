@@ -137,15 +137,15 @@ export default function AdminUsersPage() {
     loadUsers();
   }, [search, role, statusFilter, page, token]);
 
-  const handleRoleChange = async (userId: number, newRole: string) => {
+  const handleRoleChange = async (userId: number, newRole: "admin" | "moderator" | "user") => {
     try {
       await updateAdminUserApi(userId, { role: newRole }, token);
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole as any } : u))
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
       );
       if (selectedUser && selectedUser.id === userId) {
-        setSelectedUser((prev) => (prev ? { ...prev, role: newRole as any } : null));
-        resetUserForm((prev) => ({ ...prev, role: newRole as any }));
+        setSelectedUser((prev) => (prev ? { ...prev, role: newRole } : null));
+        resetUserForm((prev) => ({ ...prev, role: newRole }));
       }
       showToast("Đã cập nhật vai trò thành công!");
     } catch (err: any) {
@@ -559,7 +559,7 @@ export default function AdminUsersPage() {
                             <select
                               value={u.role}
                               disabled={isSelf}
-                              onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                              onChange={(e) => handleRoleChange(u.id, e.target.value as "admin" | "moderator" | "user")}
                               className={`rounded-lg border border-white/10 bg-[#12151f] px-2.5 py-1 text-xs font-semibold text-white focus:border-accent focus:outline-none transition ${
                                 isSelf ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:border-white/30"
                               }`}

@@ -147,8 +147,8 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share(shareData);
-      } catch (err: any) {
-        if (err.name !== "AbortError") {
+      } catch (err: unknown) {
+        if ((err as { name?: string })?.name !== "AbortError") {
           await navigator.clipboard.writeText(window.location.href);
           toast.success("Đã sao chép liên kết phim vào clipboard!");
         }
@@ -428,7 +428,7 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
                     <span>Hashtags:</span>
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
-                    {movie.tags.map((t: any, idx: number) => {
+                    {movie.tags.map((t: { name: string } | string, idx: number) => {
                       const tagName = typeof t === "string" ? t : t.name;
                       return (
                         <Link

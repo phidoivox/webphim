@@ -27,7 +27,6 @@ import {
 import type { MovieEpisode } from "@/types/movie";
 import { useVideoSession } from "@/hooks/useVideoSession";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export interface MovieServerItem {
   id: string | number;
@@ -118,7 +117,6 @@ export default function PlayerShell({
   // =================== UNIFIED VIDEO SESSION (FSM & SYNC ENGINE) ===================
   const {
     resolvedStartTime,
-    isResolved,
     resumeModal,
     dismissModal,
     unlockSession,
@@ -190,10 +188,13 @@ export default function PlayerShell({
     }
 
     if (Hls.isSupported()) {
-      // Chuẩn Netflix: Cấu hình startPosition gốc để HLS nạp trực tiếp phân đoạn cần xem
+      // Chuẩn Netflix & VOD: Cấu hình startPosition, tối ưu độ phân giải theo kích thước màn hình và đệm mượt mà
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
+        capLevelToPlayerSize: true,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
         startPosition: resolvedStartTime > 0 ? resolvedStartTime : -1,
       });
 
@@ -360,12 +361,13 @@ export default function PlayerShell({
   useEffect(() => {
     if (typeof window === "undefined" || !("wakeLock" in navigator)) return;
 
-    let wakeLockSentinel: any = null;
+    let wakeLockSentinel: { release: () => Promise<void> } | null = null;
 
     const requestWakeLock = async () => {
       try {
         if (playing && !document.hidden) {
-          wakeLockSentinel = await (navigator as any).wakeLock.request("screen");
+          const nav = navigator as unknown as { wakeLock: { request: (type: string) => Promise<{ release: () => Promise<void> }> } };
+          wakeLockSentinel = await nav.wakeLock.request("screen");
         }
       } catch (e) {
         console.debug("WakeLock request error", e);

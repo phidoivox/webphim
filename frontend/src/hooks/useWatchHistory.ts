@@ -12,7 +12,7 @@ import type { GuestHistoryItem, HistorySyncPayload } from "@/types/history";
 const GUEST_HISTORY_KEY = "webphim_guest_history";
 
 export function useWatchHistory() {
-  const { user, token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated } = useAuth();
   const broadcastRef = useRef<BroadcastChannel | null>(null);
   const lastSyncedTimeRef = useRef<number>(0);
   const lastSyncPayloadRef = useRef<HistorySyncPayload | null>(null);

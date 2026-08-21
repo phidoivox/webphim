@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface CommentFormProps {
-  onSubmit: (payload: PostCommentPayload) => Promise<any>;
+  onSubmit: (payload: PostCommentPayload) => Promise<unknown>;
   parentId?: number | null;
   placeholder?: string;
   autoFocus?: boolean;
@@ -89,7 +89,7 @@ export default function CommentForm({
       });
       toast.success(parentId ? "Đã gửi câu trả lời!" : "Đã gửi bình luận!");
       if (onCancel) onCancel();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const msg = setFormApiErrors(
         err,
         setError,

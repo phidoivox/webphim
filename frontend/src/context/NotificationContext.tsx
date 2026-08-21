@@ -80,14 +80,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Load ban đầu khi đăng nhập
   useEffect(() => {
+    let ignore = false;
     if (isAuthenticated && token) {
-      fetchNotifications(1, false);
+      void (async () => {
+        if (!ignore) {
+          await fetchNotifications(1, false);
+        }
+      })();
     } else {
-      setNotifications([]);
-      setUnreadCount(0);
-      setMeta(null);
       disconnectEcho();
     }
+    return () => {
+      ignore = true;
+    };
   }, [isAuthenticated, token, fetchNotifications]);
 
   // ── LARAVEL REVERB WEBSOCKET SUBSCRIPTION ──
@@ -291,10 +296,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [meta, page, isLoading, fetchNotifications]);
 
   const value: NotificationContextType = {
-    notifications,
-    unreadCount,
+    notifications: isAuthenticated ? notifications : [],
+    unreadCount: isAuthenticated ? unreadCount : 0,
     isLoading,
-    meta,
+    meta: isAuthenticated ? meta : null,
     hasMore: meta ? page < meta.lastPage : false,
     markAsRead,
     markAllAsRead,
@@ -310,7 +315,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   );
 }
 
-export function useNotifications(_autoPoll?: boolean) {
+export function useNotifications(autoPoll?: boolean) {
+  void autoPoll;
   const context = useContext(NotificationContext);
   if (!context) {
     throw new Error("useNotifications must be used within a NotificationProvider");

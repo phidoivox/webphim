@@ -69,7 +69,6 @@ export default function Header() {
   // Live search theo debouncedQuery
   useEffect(() => {
     if (debouncedQuery.length < 2) {
-      setSuggestions({ movies: [], actors: [] });
       return;
     }
 

@@ -10,7 +10,6 @@ import {
   LibraryIcon,
   LoginIcon,
   PlayIcon,
-  UserIcon,
   XIcon,
 } from "@/components/ui/icons";
 import { GENRES } from "@/data/genres";

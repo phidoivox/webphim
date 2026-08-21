@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
+  type InfiniteData,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/api";
 import type {
   CommentItem,
+  CommentListResponse,
   PostCommentPayload,
   UpdateCommentPayload,
 } from "@/types/comment";
@@ -85,7 +87,7 @@ export function useComments(movieIdOrSlug: string | number) {
       toast.success(payload.parent_id ? "Đã gửi câu trả lời!" : "Đã gửi bình luận!");
       void queryClient.invalidateQueries({ queryKey: ["comments", String(movieIdOrSlug)] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || "Không thể gửi bình luận.");
     },
   });
@@ -109,7 +111,7 @@ export function useComments(movieIdOrSlug: string | number) {
       toast.success("Đã cập nhật bình luận!");
       void queryClient.invalidateQueries({ queryKey: ["comments", String(movieIdOrSlug)] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || "Không thể cập nhật bình luận.");
     },
   });
@@ -127,7 +129,7 @@ export function useComments(movieIdOrSlug: string | number) {
       toast.success("Đã xóa bình luận!");
       void queryClient.invalidateQueries({ queryKey: ["comments", String(movieIdOrSlug)] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || "Không thể xóa bình luận.");
     },
   });
@@ -143,13 +145,13 @@ export function useComments(movieIdOrSlug: string | number) {
     },
     onMutate: async (commentId) => {
       await queryClient.cancelQueries({ queryKey });
-      const previousData = queryClient.getQueryData(queryKey);
+      const previousData = queryClient.getQueryData<InfiniteData<CommentListResponse>>(queryKey);
 
-      queryClient.setQueryData(queryKey, (old: any) => {
+      queryClient.setQueryData<InfiniteData<CommentListResponse>>(queryKey, (old) => {
         if (!old?.pages) return old;
         return {
           ...old,
-          pages: old.pages.map((page: any) => ({
+          pages: old.pages.map((page) => ({
             ...page,
             data: page.data.map((c: CommentItem) => {
               if (c.id === commentId) {
@@ -212,7 +214,8 @@ export function useComments(movieIdOrSlug: string | number) {
   );
 
   const removeComment = useCallback(
-    async (commentId: number, _parentId?: number | null) => {
+    async (commentId: number, parentId?: number | null) => {
+      void parentId;
       await removeCommentMutation.mutateAsync(commentId);
     },
     [removeCommentMutation]

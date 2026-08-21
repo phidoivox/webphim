@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(freshUser);
           setStoredUser(freshUser);
         }
-      } catch (err) {
+      } catch {
         // Token không còn hợp lệ hoặc đã bị revoke -> xóa session
         if (isMounted) {
           removeStoredToken();

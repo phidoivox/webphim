@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { COUNTRIES } from "@/data/countries";
 import { GENRES } from "@/data/genres";
 import { SearchIcon } from "@/components/ui/icons";
@@ -48,33 +48,22 @@ export default function AdvancedFilterPanel({
   initialCountry,
 }: AdvancedFilterPanelProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const [selectedCountry, setSelectedCountry] = useState(
-    searchParams?.get("country") || initialCountry || ""
+    () => searchParams?.get("country") || initialCountry || ""
   );
   const [selectedType, setSelectedType] = useState(
-    searchParams?.get("type") || initialType || ""
+    () => searchParams?.get("type") || initialType || ""
   );
   const [selectedGenre, setSelectedGenre] = useState(
-    searchParams?.get("genre") || initialGenre || ""
+    () => searchParams?.get("genre") || initialGenre || ""
   );
-  const [selectedLang, setSelectedLang] = useState(searchParams?.get("lang") || "");
-  const [selectedYear, setSelectedYear] = useState(searchParams?.get("year") || "");
+  const [selectedLang, setSelectedLang] = useState(() => searchParams?.get("lang") || "");
+  const [selectedYear, setSelectedYear] = useState(() => searchParams?.get("year") || "");
   const [customYear, setCustomYear] = useState("");
-  const [selectedSort, setSelectedSort] = useState(searchParams?.get("sort") || "latest");
-
-  // Sync state when props or searchParams change
-  useEffect(() => {
-    setSelectedCountry(searchParams?.get("country") || initialCountry || "");
-    setSelectedType(searchParams?.get("type") || initialType || "");
-    setSelectedGenre(searchParams?.get("genre") || initialGenre || "");
-    setSelectedLang(searchParams?.get("lang") || "");
-    setSelectedYear(searchParams?.get("year") || "");
-    setSelectedSort(searchParams?.get("sort") || "latest");
-  }, [initialType, initialGenre, initialCountry, searchParams]);
+  const [selectedSort, setSelectedSort] = useState(() => searchParams?.get("sort") || "latest");
 
   if (!isOpen) return null;
 
