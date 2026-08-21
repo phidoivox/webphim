@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useOptimistic, startTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { MovieSummary } from "@/types/movie";
@@ -17,7 +17,13 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
   const isSeries = movie.type === "series" || movie.type === "tv-show";
   const [isHovered, setIsHovered] = useState(false);
   const [popoverSide, setPopoverSide] = useState<"left" | "right">("right");
-  const { isFavorite, toggleBookmark } = useBookmark(movie.id);
+  const { isFavorite: baseFavorite, toggleBookmark } = useBookmark(movie.id);
+
+  // React 19 Optimistic state for 0ms favorite feedback
+  const [optimisticFavorite, setOptimisticFavorite] = useOptimistic(
+    Boolean(baseFavorite),
+    (current) => !current
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -25,21 +31,24 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
   const toggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    void toggleBookmark(
-      {
-        id: movie.id,
-        name: movie.name,
-        originName: movie.originName,
-        slug: movie.slug,
-        posterUrl: movie.posterUrl,
-        thumbUrl: movie.thumbUrl,
-        year: movie.year,
-        quality: typeof movie.quality === "string" ? movie.quality : undefined,
-        ratingAvg: movie.ratingAvg,
-        genres: movie.genres,
-      },
-      "favorite"
-    );
+    startTransition(async () => {
+      setOptimisticFavorite(null);
+      await toggleBookmark(
+        {
+          id: movie.id,
+          name: movie.name,
+          originName: movie.originName,
+          slug: movie.slug,
+          posterUrl: movie.posterUrl,
+          thumbUrl: movie.thumbUrl,
+          year: movie.year,
+          quality: typeof movie.quality === "string" ? movie.quality : undefined,
+          ratingAvg: movie.ratingAvg,
+          genres: movie.genres,
+        },
+        "favorite"
+      );
+    });
   };
 
   const handleMouseEnter = () => {
@@ -186,14 +195,14 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
               <button
                 type="button"
                 onClick={toggleFavorite}
-                className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold border transition ${
-                  isFavorite
+                className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold border transition cursor-pointer ${
+                  optimisticFavorite
                     ? "bg-rose-500/20 border-rose-500/60 text-rose-400"
                     : "bg-white/10 hover:bg-white/15 border-white/10 text-white"
                 }`}
               >
-                <HeartIcon className={`h-3 w-3 ${isFavorite ? "fill-rose-500 text-rose-500" : "text-white"}`} />
-                <span>{isFavorite ? "Đã thích" : "Thích"}</span>
+                <HeartIcon className={`h-3 w-3 ${optimisticFavorite ? "fill-rose-500 text-rose-500" : "text-white"}`} />
+                <span>{optimisticFavorite ? "Đã thích" : "Thích"}</span>
               </button>
               <Link
                 href={`/phim/${movie.slug}`}

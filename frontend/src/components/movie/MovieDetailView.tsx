@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useOptimistic, startTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -42,7 +42,19 @@ function getInitials(name: string): string {
 
 export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
   const slug = movie.slug;
-  const { isFavorite, isWatchLater, toggleBookmark } = useBookmark(movie.id);
+  const { isFavorite: baseFavorite, isWatchLater: baseWatchLater, toggleBookmark } = useBookmark(movie.id);
+
+  // React 19 useOptimistic for 0ms interaction
+  const [optimisticFavorite, setOptimisticFavorite] = useOptimistic(
+    Boolean(baseFavorite),
+    (current) => !current
+  );
+
+  const [optimisticWatchLater, setOptimisticWatchLater] = useOptimistic(
+    Boolean(baseWatchLater),
+    (current) => !current
+  );
+
   const [activeTab, setActiveTab] = useState<TabKey>("Tập phim");
   const [selectedServerKey, setSelectedServerKey] = useState<string | null>(null);
 
@@ -307,34 +319,37 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
                   <button
                     type="button"
                     onClick={() => {
-                      void toggleBookmark(
-                        {
-                          id: movie.id,
-                          name: movie.name,
-                          originName: movie.originName,
-                          slug: movie.slug,
-                          posterUrl: movie.posterUrl,
-                          thumbUrl: movie.thumbUrl,
-                          year: movie.year,
-                          quality: typeof movie.quality === "string" ? movie.quality : undefined,
-                          ratingAvg: movie.ratingAvg,
-                          genres: movie.genres,
-                        },
-                        "favorite"
-                      );
+                      startTransition(async () => {
+                        setOptimisticFavorite(null);
+                        await toggleBookmark(
+                          {
+                            id: movie.id,
+                            name: movie.name,
+                            originName: movie.originName,
+                            slug: movie.slug,
+                            posterUrl: movie.posterUrl,
+                            thumbUrl: movie.thumbUrl,
+                            year: movie.year,
+                            quality: typeof movie.quality === "string" ? movie.quality : undefined,
+                            ratingAvg: movie.ratingAvg,
+                            genres: movie.genres,
+                          },
+                          "favorite"
+                        );
+                      });
                     }}
                     className="flex flex-col items-center gap-1 text-[11px] text-gray-300 hover:text-white transition-all transform active:scale-90 cursor-pointer group"
-                    title={isFavorite ? "Bỏ yêu thích" : "Yêu thích"}
+                    title={optimisticFavorite ? "Bỏ yêu thích" : "Yêu thích"}
                   >
                     <HeartIcon
                       className={`h-5 w-5 transition-all duration-150 ${
-                        isFavorite
+                        optimisticFavorite
                           ? "fill-rose-500 text-rose-500 scale-110"
                           : "group-hover:scale-110 text-gray-300 group-hover:text-white"
                       }`}
                     />
-                    <span className={isFavorite ? "font-bold text-rose-400" : ""}>
-                      {isFavorite ? "Đã thích" : "Yêu thích"}
+                    <span className={optimisticFavorite ? "font-bold text-rose-400" : ""}>
+                      {optimisticFavorite ? "Đã thích" : "Yêu thích"}
                     </span>
                   </button>
 
@@ -342,34 +357,37 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
                   <button
                     type="button"
                     onClick={() => {
-                      void toggleBookmark(
-                        {
-                          id: movie.id,
-                          name: movie.name,
-                          originName: movie.originName,
-                          slug: movie.slug,
-                          posterUrl: movie.posterUrl,
-                          thumbUrl: movie.thumbUrl,
-                          year: movie.year,
-                          quality: typeof movie.quality === "string" ? movie.quality : undefined,
-                          ratingAvg: movie.ratingAvg,
-                          genres: movie.genres,
-                        },
-                        "watchlater"
-                      );
+                      startTransition(async () => {
+                        setOptimisticWatchLater(null);
+                        await toggleBookmark(
+                          {
+                            id: movie.id,
+                            name: movie.name,
+                            originName: movie.originName,
+                            slug: movie.slug,
+                            posterUrl: movie.posterUrl,
+                            thumbUrl: movie.thumbUrl,
+                            year: movie.year,
+                            quality: typeof movie.quality === "string" ? movie.quality : undefined,
+                            ratingAvg: movie.ratingAvg,
+                            genres: movie.genres,
+                          },
+                          "watchlater"
+                        );
+                      });
                     }}
                     className="flex flex-col items-center gap-1 text-[11px] text-gray-300 hover:text-white transition-all transform active:scale-90 cursor-pointer group"
-                    title={isWatchLater ? "Bỏ lưu khỏi tủ phim" : "Lưu vào tủ phim"}
+                    title={optimisticWatchLater ? "Bỏ lưu khỏi tủ phim" : "Lưu vào tủ phim"}
                   >
                     <BookmarkIcon
                       className={`h-5 w-5 transition-all duration-150 ${
-                        isWatchLater
+                        optimisticWatchLater
                           ? "fill-accent text-accent scale-110"
                           : "group-hover:scale-110 text-gray-300 group-hover:text-white"
                       }`}
                     />
-                    <span className={isWatchLater ? "font-bold text-accent" : ""}>
-                      {isWatchLater ? "Trong tủ" : "Lưu tủ"}
+                    <span className={optimisticWatchLater ? "font-bold text-accent" : ""}>
+                      {optimisticWatchLater ? "Trong tủ" : "Lưu tủ"}
                     </span>
                   </button>
 
