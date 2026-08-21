@@ -97,6 +97,7 @@ export async function sendRequest<T>(
     token?: string | null;
     headers?: Record<string, string>;
     revalidate?: number | false;
+    tags?: string[];
   } = {}
 ): Promise<T> {
   const method = options.method || "GET";
@@ -113,14 +114,23 @@ export async function sendRequest<T>(
   let customErrorMessage: string | null = null;
   let responseStatus = 0;
 
-  const fetchOptions: RequestInit & { next?: { revalidate?: number | false } } = {
+  const fetchOptions: RequestInit & { next?: { revalidate?: number | false; tags?: string[] } } = {
     method,
     headers,
     body,
   };
 
-  if (method === "GET" && options.revalidate !== undefined) {
-    fetchOptions.next = { revalidate: options.revalidate };
+  if (method === "GET") {
+    const nextConfig: { revalidate?: number | false; tags?: string[] } = {};
+    if (options.revalidate !== undefined) {
+      nextConfig.revalidate = options.revalidate;
+    }
+    if (options.tags && options.tags.length > 0) {
+      nextConfig.tags = options.tags;
+    }
+    if (Object.keys(nextConfig).length > 0) {
+      fetchOptions.next = nextConfig;
+    }
   }
 
   const urlsToTry = cachedWorkingBaseUrl
@@ -181,7 +191,11 @@ export async function sendRequest<T>(
 }
 
 /** Thử base URL đã biết hoặc lần lượt các base URL, trả kết quả của base 200 đầu tiên (có client caching). */
-export async function fetchJson<T>(path: string, bypassCache = false): Promise<ApiResult<T>> {
+export async function fetchJson<T>(
+  path: string,
+  bypassCache = false,
+  fetchOptions: { tags?: string[]; revalidate?: number | false } = {}
+): Promise<ApiResult<T>> {
   const cacheKey = path;
   const isClient = typeof window !== "undefined";
 
@@ -192,7 +206,7 @@ export async function fetchJson<T>(path: string, bypassCache = false): Promise<A
     }
   }
 
-  const data = await sendRequest<T>(path, { method: "GET" });
+  const data = await sendRequest<T>(path, { method: "GET", ...fetchOptions });
   if (isClient) {
     clientMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
   }
@@ -240,22 +254,30 @@ export async function logoutApi(token: string): Promise<void> {
 // =================== MOVIE & CONTENT APIS ===================
 
 export async function getHomeData(bypassCache = false): Promise<HomeData> {
-  const { data: payload } = await fetchJson<{ data: HomeData }>("/v1/home", bypassCache);
+  const { data: payload } = await fetchJson<{ data: HomeData }>("/v1/home", bypassCache, {
+    tags: ["home", "movies"],
+  });
   return payload.data;
 }
 
 export async function getMovieDetail(slug: string, bypassCache = false): Promise<MovieDetail> {
-  const { data: payload } = await fetchJson<{ data: MovieDetail }>(`/v1/movies/${slug}`, bypassCache);
+  const { data: payload } = await fetchJson<{ data: MovieDetail }>(`/v1/movies/${slug}`, bypassCache, {
+    tags: ["movies", `movie-${slug}`],
+  });
   return payload.data;
 }
 
 export async function getGenres(bypassCache = false): Promise<GenreItem[]> {
-  const { data: payload } = await fetchJson<{ data: GenreItem[] }>("/v1/genres", bypassCache);
+  const { data: payload } = await fetchJson<{ data: GenreItem[] }>("/v1/genres", bypassCache, {
+    tags: ["genres", "taxonomy"],
+  });
   return payload.data;
 }
 
 export async function getCountries(bypassCache = false): Promise<CountryItem[]> {
-  const { data: payload } = await fetchJson<{ data: CountryItem[] }>("/v1/countries", bypassCache);
+  const { data: payload } = await fetchJson<{ data: CountryItem[] }>("/v1/countries", bypassCache, {
+    tags: ["countries", "taxonomy"],
+  });
   return payload.data;
 }
 
