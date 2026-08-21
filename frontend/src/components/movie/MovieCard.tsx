@@ -89,7 +89,7 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
       ref={containerRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={cn("relative movie-card-contain", className)}
+      className={cn("@container relative movie-card-contain", className)}
     >
 
       <Link href={`/phim/${movie.slug}`} className="group block w-full">
@@ -105,7 +105,7 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
 
           {/* Top-Right Badge (Song Ngữ / Mới) */}
           {movie.isNew && (
-            <span className="absolute right-1.5 top-1.5 z-10 rounded bg-accent px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
+            <span className="absolute right-1.5 top-1.5 z-10 rounded bg-accent px-1.5 py-0.5 text-[8px] @[140px]:text-[9px] @[180px]:text-[10px] font-bold text-white shadow">
               MỚI
             </span>
           )}
@@ -113,13 +113,13 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
           {/* Bottom-Center Badge (PĐ. Full / PĐ. Tập...) */}
           <div className="absolute bottom-1.5 inset-x-0 z-10 flex items-center justify-center gap-1 px-1">
             {isSeries ? (
-              <span className="rounded bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white/95 shadow-md border border-white/10 backdrop-blur-xs">
+              <span className="rounded bg-black/80 px-1.5 @[140px]:px-2 py-0.5 text-[9px] @[140px]:text-[10px] font-semibold text-white/95 shadow-md border border-white/10 backdrop-blur-xs">
                 {movie.episodeCurrent
                   ? `PĐ. ${movie.episodeCurrent.replace(/tập\s*/i, "").trim()}`
                   : "PĐ. Full"}
               </span>
             ) : (
-              <span className="rounded bg-black/80 px-2 py-0.5 text-[10px] font-semibold text-white/95 shadow-md border border-white/10 backdrop-blur-xs">
+              <span className="rounded bg-black/80 px-1.5 @[140px]:px-2 py-0.5 text-[9px] @[140px]:text-[10px] font-semibold text-white/95 shadow-md border border-white/10 backdrop-blur-xs">
                 {movie.episodeCurrent?.toLowerCase().includes("full")
                   ? movie.episodeCurrent
                   : "PĐ. Full"}
@@ -129,18 +129,18 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
 
           {/* Hover Overlay Play Icon */}
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/45 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-[0_0_20px_rgba(255,92,26,0.6)] transition-transform duration-200 group-hover:scale-110">
-              <PlayIcon className="h-5 w-5" />
+            <span className="flex h-8 w-8 @[150px]:h-10 @[150px]:w-10 items-center justify-center rounded-full bg-accent text-white shadow-[0_0_20px_rgba(255,92,26,0.6)] transition-transform duration-200 group-hover:scale-110">
+              <PlayIcon className="h-4 w-4 @[150px]:h-5 @[150px]:w-5" />
             </span>
           </div>
         </div>
 
         {/* Info Lines (Centered like screenshot) */}
         <div className="mt-1.5 px-0.5 text-center">
-          <p className="truncate text-xs font-semibold text-white group-hover:text-accent transition-colors sm:text-sm">
+          <p className="truncate text-[11px] @[140px]:text-xs @[180px]:text-sm font-semibold text-white group-hover:text-accent transition-colors">
             {movie.name}
           </p>
-          <p className="truncate text-[11px] text-white/50">
+          <p className="truncate text-[10px] @[140px]:text-[11px] @[180px]:text-xs text-white/50">
             {movie.originName || movie.year || `${movie.quality || "HD"}`}
           </p>
         </div>
