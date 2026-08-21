@@ -2,9 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
-use App\Models\Country;
-use App\Models\Genre;
-use App\Models\Movie;
+use Database\Seeders\MovieTestSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -14,7 +12,7 @@ class GenreCountryApiTest extends TestCase
 
     public function test_can_get_list_of_genres_with_active_movie_counts(): void
     {
-        $this->seed(\Database\Seeders\MovieTestSeeder::class);
+        $this->seed(MovieTestSeeder::class);
 
         $response = $this->getJson('/api/v1/genres');
 
@@ -36,7 +34,7 @@ class GenreCountryApiTest extends TestCase
 
     public function test_can_get_list_of_countries(): void
     {
-        $this->seed(\Database\Seeders\MovieTestSeeder::class);
+        $this->seed(MovieTestSeeder::class);
 
         $response = $this->getJson('/api/v1/countries');
 

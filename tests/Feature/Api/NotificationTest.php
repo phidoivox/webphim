@@ -17,7 +17,9 @@ class NotificationTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected User $otherUser;
+
     protected Movie $movie;
 
     protected function setUp(): void

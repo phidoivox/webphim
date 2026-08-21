@@ -14,7 +14,9 @@ class AdminCommentTest extends TestCase
     use RefreshDatabase;
 
     protected Movie $movie;
+
     protected User $admin;
+
     protected User $regularUser;
 
     protected function setUp(): void

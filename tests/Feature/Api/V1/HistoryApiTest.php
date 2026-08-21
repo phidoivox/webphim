@@ -15,7 +15,9 @@ class HistoryApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected Movie $movie;
+
     protected Episode $episode;
 
     protected function setUp(): void

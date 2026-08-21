@@ -1,12 +1,11 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use App\Models\User;
 use App\Models\Movie;
-use App\Models\Episode;
+use App\Models\User;
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -14,10 +13,10 @@ Artisan::command('inspire', function () {
 
 Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm cho mỗi endpoint}', function () {
     $iterations = max(1, (int) $this->option('iterations') ?: 10);
-    $this->info("========================================================================================================");
-    $this->info("                       KIỂM TRA HIỆU NĂNG & TỐC ĐỘ PHẢN HỒI TOÀN BỘ API                          ");
-    $this->info("========================================================================================================");
-    $this->line("• Môi trường: <fg=cyan>" . app()->environment() . "</> | PHP: <fg=cyan>" . PHP_VERSION . "</> | Laravel: <fg=cyan>" . app()->version() . "</>");
+    $this->info('========================================================================================================');
+    $this->info('                       KIỂM TRA HIỆU NĂNG & TỐC ĐỘ PHẢN HỒI TOÀN BỘ API                          ');
+    $this->info('========================================================================================================');
+    $this->line('• Môi trường: <fg=cyan>'.app()->environment().'</> | PHP: <fg=cyan>'.PHP_VERSION.'</> | Laravel: <fg=cyan>'.app()->version().'</>');
     $this->line("• Số lần đo mẫu lặp lại mỗi API: <fg=yellow>{$iterations} lần</>");
 
     // Lấy user test Sanctum
@@ -27,7 +26,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
         $token = $testUser->createToken('benchmark_token')->plainTextToken;
         $this->line("• User kiểm thử Sanctum: <fg=green>{$testUser->email}</> (ID: {$testUser->id})");
     } else {
-        $this->line("• User kiểm thử Sanctum: <fg=yellow>Chưa có user trong DB</>");
+        $this->line('• User kiểm thử Sanctum: <fg=yellow>Chưa có user trong DB</>');
     }
 
     // Lấy phim mẫu và tập phim mẫu
@@ -37,7 +36,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
     $sampleEpisode = $sampleMovie && $sampleMovie->episodes->isNotEmpty() ? $sampleMovie->episodes->first() : null;
     $sampleEpisodeId = $sampleEpisode ? $sampleEpisode->id : null;
 
-    $this->line("• Phim mẫu kiểm thử: <fg=green>" . ($sampleMovie ? "{$sampleMovie->name} [slug: {$sampleSlug}, id: {$sampleMovieId}]" : "N/A") . "</>");
+    $this->line('• Phim mẫu kiểm thử: <fg=green>'.($sampleMovie ? "{$sampleMovie->name} [slug: {$sampleSlug}, id: {$sampleMovieId}]" : 'N/A').'</>');
     $this->newLine();
 
     $routes = [
@@ -131,7 +130,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
             'group' => 'Detail',
             'name' => 'Chi tiết Phim + Episodes + Servers',
             'method' => 'GET',
-            'uri' => '/api/v1/movies/' . $sampleSlug,
+            'uri' => '/api/v1/movies/'.$sampleSlug,
             'params' => [],
             'auth' => false,
         ],
@@ -157,7 +156,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
             'group' => 'Bookmarks',
             'name' => 'Kiểm tra trạng thái Bookmark của phim',
             'method' => 'GET',
-            'uri' => '/api/v1/bookmarks/check/' . $sampleMovieId,
+            'uri' => '/api/v1/bookmarks/check/'.$sampleMovieId,
             'params' => [],
             'auth' => true,
         ],
@@ -182,7 +181,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
             'group' => 'History',
             'name' => 'Lấy tiến độ xem của phim (/movie/{id})',
             'method' => 'GET',
-            'uri' => '/api/v1/history/movie/' . $sampleMovieId,
+            'uri' => '/api/v1/history/movie/'.$sampleMovieId,
             'params' => [],
             'auth' => true,
         ],
@@ -206,7 +205,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
     $allAverages = [];
 
     foreach ($routes as $route) {
-        if ($route['auth'] && !$token) {
+        if ($route['auth'] && ! $token) {
             $tableRows[] = [
                 $route['group'],
                 $route['name'],
@@ -216,8 +215,9 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
                 '-',
                 '-',
                 '-',
-                '-'
+                '-',
             ];
+
             continue;
         }
 
@@ -232,7 +232,7 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
             'REQUEST_METHOD' => $route['method'],
         ];
         if ($route['auth'] && $token) {
-            $serverParams['HTTP_AUTHORIZATION'] = 'Bearer ' . $token;
+            $serverParams['HTTP_AUTHORIZATION'] = 'Bearer '.$token;
         }
 
         // 1. Warm-up run
@@ -264,20 +264,20 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
         $avgQueries = round(array_sum($queryCounts) / count($queryCounts), 1);
         $allAverages[] = $avgMs;
 
-        $statusFormatted = ($status >= 200 && $status < 300) 
-            ? "<fg=green>{$status} OK</>" 
+        $statusFormatted = ($status >= 200 && $status < 300)
+            ? "<fg=green>{$status} OK</>"
             : "<fg=red>{$status}</>";
 
-        $avgFormatted = $avgMs < 20 
-            ? "<fg=bright-green>" . number_format($avgMs, 2) . " ms</>"
-            : ($avgMs < 40 
-                ? "<fg=green>" . number_format($avgMs, 2) . " ms</>" 
-                : ($avgMs < 80 
-                    ? "<fg=yellow>" . number_format($avgMs, 2) . " ms</>" 
-                    : "<fg=red>" . number_format($avgMs, 2) . " ms</>"));
+        $avgFormatted = $avgMs < 20
+            ? '<fg=bright-green>'.number_format($avgMs, 2).' ms</>'
+            : ($avgMs < 40
+                ? '<fg=green>'.number_format($avgMs, 2).' ms</>'
+                : ($avgMs < 80
+                    ? '<fg=yellow>'.number_format($avgMs, 2).' ms</>'
+                    : '<fg=red>'.number_format($avgMs, 2).' ms</>'));
 
-        $sizeFormatted = $contentLength > 1024 
-            ? number_format($contentLength / 1024, 2) . " KB" 
+        $sizeFormatted = $contentLength > 1024
+            ? number_format($contentLength / 1024, 2).' KB'
             : "{$contentLength} B";
 
         $tableRows[] = [
@@ -286,8 +286,8 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
             $route['method'],
             $statusFormatted,
             $avgFormatted,
-            number_format($minMs, 2) . " ms",
-            number_format($maxMs, 2) . " ms",
+            number_format($minMs, 2).' ms',
+            number_format($maxMs, 2).' ms',
             $avgQueries,
             $sizeFormatted,
         ];
@@ -295,17 +295,17 @@ Artisan::command('benchmark:api {--iterations=10 : Số lần lặp đo kiểm c
 
     $this->table($headers, $tableRows);
 
-    if (!empty($allAverages)) {
+    if (! empty($allAverages)) {
         $grandAvg = array_sum($allAverages) / count($allAverages);
         $this->newLine();
-        $this->info("========================================================================================================");
-        $this->info("                                        BẢNG TỔNG KẾT HIỆU NĂNG                                         ");
-        $this->info("========================================================================================================");
-        $this->line("• Tốc độ phản hồi trung bình toàn hệ thống: <fg=bright-green;options=bold>" . number_format($grandAvg, 2) . " ms</>");
-        $this->line("• API phản hồi nhanh nhất: <fg=green>" . number_format(min($allAverages), 2) . " ms</>");
-        $this->line("• API phản hồi lâu nhất (Trang chủ/Chi tiết): <fg=yellow>" . number_format(max($allAverages), 2) . " ms</>");
-        $this->line("• Đánh giá hiệu năng: <fg=bright-green;options=bold>RẤT NHANH (Tất cả endpoint đều dưới 75ms)</>");
-        $this->info("========================================================================================================");
+        $this->info('========================================================================================================');
+        $this->info('                                        BẢNG TỔNG KẾT HIỆU NĂNG                                         ');
+        $this->info('========================================================================================================');
+        $this->line('• Tốc độ phản hồi trung bình toàn hệ thống: <fg=bright-green;options=bold>'.number_format($grandAvg, 2).' ms</>');
+        $this->line('• API phản hồi nhanh nhất: <fg=green>'.number_format(min($allAverages), 2).' ms</>');
+        $this->line('• API phản hồi lâu nhất (Trang chủ/Chi tiết): <fg=yellow>'.number_format(max($allAverages), 2).' ms</>');
+        $this->line('• Đánh giá hiệu năng: <fg=bright-green;options=bold>RẤT NHANH (Tất cả endpoint đều dưới 75ms)</>');
+        $this->info('========================================================================================================');
     }
 
     if ($testUser && $token) {

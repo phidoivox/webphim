@@ -1,5 +1,13 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\AdminCommentController;
+use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
+use App\Http\Controllers\Api\V1\Admin\AdminEpisodeController;
+use App\Http\Controllers\Api\V1\Admin\AdminMovieController;
+use App\Http\Controllers\Api\V1\Admin\AdminNotificationController;
+use App\Http\Controllers\Api\V1\Admin\AdminReportController;
+use App\Http\Controllers\Api\V1\Admin\AdminTaxonomyController;
+use App\Http\Controllers\Api\V1\Admin\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BookmarkController;
 use App\Http\Controllers\Api\V1\CommentController;
@@ -10,14 +18,6 @@ use App\Http\Controllers\Api\V1\HomeController;
 use App\Http\Controllers\Api\V1\MovieController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ScheduleController;
-use App\Http\Controllers\Api\V1\Admin\AdminCommentController;
-use App\Http\Controllers\Api\V1\Admin\AdminDashboardController;
-use App\Http\Controllers\Api\V1\Admin\AdminEpisodeController;
-use App\Http\Controllers\Api\V1\Admin\AdminMovieController;
-use App\Http\Controllers\Api\V1\Admin\AdminNotificationController;
-use App\Http\Controllers\Api\V1\Admin\AdminReportController;
-use App\Http\Controllers\Api\V1\Admin\AdminTaxonomyController;
-use App\Http\Controllers\Api\V1\Admin\AdminUserController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/status', function () {
@@ -148,5 +148,3 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::put('/reports/{id}', [AdminReportController::class, 'update'])->whereNumber('id');
     Route::delete('/reports/{id}', [AdminReportController::class, 'destroy'])->whereNumber('id');
 });
-
-

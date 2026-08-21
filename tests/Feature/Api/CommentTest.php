@@ -14,6 +14,7 @@ class CommentTest extends TestCase
     use RefreshDatabase;
 
     protected Movie $movie;
+
     protected User $user;
 
     protected function setUp(): void
