@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Events\NotificationSentEvent;
 use App\Models\Episode;
-use App\Models\Movie;
 use App\Models\User;
 use App\Notifications\NewEpisodeNotification;
 use App\Notifications\SystemBroadcastNotification;
@@ -13,6 +12,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 
 class NotificationService
 {
@@ -89,7 +89,7 @@ class NotificationService
                     $unread = $user->unreadNotifications()->count();
                     $latest = $user->notifications()->latest()->first();
                     $formatted = $latest ? self::formatNotification($latest) : [
-                        'id' => (string) \Illuminate\Support\Str::uuid(),
+                        'id' => (string) Str::uuid(),
                         'title' => $title,
                         'message' => $message,
                         'link' => $link,

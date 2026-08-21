@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Movie;
+use App\Models\Person;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
@@ -14,7 +15,7 @@ class MovieService
     /**
      * Lọc danh sách phim phân trang theo nhiều tiêu chí.
      *
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     public function filterMovies(array $filters, int $perPage = 24): LengthAwarePaginator
     {
@@ -22,7 +23,7 @@ class MovieService
             ->active()
             ->with(['genres:id,name,slug']);
 
-        if (!empty($filters['q'])) {
+        if (! empty($filters['q'])) {
             $keyword = trim((string) $filters['q']);
             $escaped = str_replace(['%', '_'], ['\\%', '\\_'], $keyword);
             $driver = DB::connection()->getDriverName();
@@ -42,7 +43,7 @@ class MovieService
             }
         }
 
-        if (!empty($filters['type'])) {
+        if (! empty($filters['type'])) {
             $type = (string) $filters['type'];
             if ($type === 'tv-shows' || $type === 'tv-show') {
                 $query->where(function ($q) {
@@ -61,19 +62,19 @@ class MovieService
             }
         }
 
-        if (!empty($filters['genre'])) {
+        if (! empty($filters['genre'])) {
             $query->whereHas('genres', function ($q) use ($filters) {
                 $q->where('slug', $filters['genre']);
             });
         }
 
-        if (!empty($filters['country'])) {
+        if (! empty($filters['country'])) {
             $query->whereHas('countries', function ($q) use ($filters) {
                 $q->where('slug', $filters['country']);
             });
         }
 
-        if (!empty($filters['lang'])) {
+        if (! empty($filters['lang'])) {
             $lang = $filters['lang'];
             $query->where(function ($q) use ($lang) {
                 $q->where('lang', 'like', "%{$lang}%")
@@ -83,7 +84,7 @@ class MovieService
             });
         }
 
-        if (!empty($filters['year'])) {
+        if (! empty($filters['year'])) {
             $query->where('year', (int) $filters['year']);
         }
 
@@ -102,7 +103,7 @@ class MovieService
     /**
      * Tìm kiếm phim và diễn viên theo từ khóa.
      *
-     * @return array{movies: Collection<int, Movie>, actors: Collection<int, \App\Models\Person>}
+     * @return array{movies: Collection<int, Movie>, actors: Collection<int, Person>}
      */
     public function searchAll(string $keyword, int $limit = 5): array
     {
@@ -139,7 +140,7 @@ class MovieService
             ->limit($limit)
             ->get();
 
-        $actors = \App\Models\Person::query()
+        $actors = Person::query()
             ->where(function ($q) use ($escaped) {
                 $q->where('name', 'like', "%{$escaped}%")
                     ->orWhere('other_names', 'like', "%{$escaped}%");
@@ -214,4 +215,3 @@ class MovieService
         $movie->increment('view_count');
     }
 }
-

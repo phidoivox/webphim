@@ -86,7 +86,7 @@ class AdminUserController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $user = User::query()->findOrFail($id);
-        
+
         // Không cho phép tự xóa chính mình
         if (request()->user()?->id === $user->id) {
             return response()->json([

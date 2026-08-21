@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\StoreMovieRequest;
 use App\Http\Requests\Api\V1\Admin\UpdateMovieRequest;
+use App\Models\AuditLog;
 use App\Models\Movie;
 use App\Models\Person;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class AdminMovieController extends Controller
@@ -435,12 +437,13 @@ class AdminMovieController extends Controller
                         $movie->delete();
                         $deleted++;
                     }
+
                     return $deleted;
                 })(),
             };
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('audit_logs')) {
-                \App\Models\AuditLog::query()->create([
+            if (Schema::hasTable('audit_logs')) {
+                AuditLog::query()->create([
                     'user_id' => $request->user()?->id,
                     'action' => 'bulk_action',
                     'model_type' => Movie::class,
@@ -548,7 +551,7 @@ class AdminMovieController extends Controller
     /**
      * Đồng bộ danh sách thẻ từ khóa (Tags) cho phim.
      *
-     * @param array<int|string|array{id?: int, name?: string}>|null $tags
+     * @param  array<int|string|array{id?: int, name?: string}>|null  $tags
      */
     protected function syncTags(Movie $movie, ?array $tags): void
     {

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 class ScheduleService
 {
     public const CACHE_KEY = 'movies:weekly_schedule';
+
     public const CACHE_TTL = 1800; // 30 phút
 
     /**

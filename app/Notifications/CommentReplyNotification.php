@@ -42,7 +42,7 @@ class CommentReplyNotification extends Notification
             ->subject("[WebPhim] {$this->replier->name} đã trả lời bình luận của bạn")
             ->greeting("Xin chào {$notifiable->name},")
             ->line("**{$this->replier->name}** vừa phản hồi bình luận của bạn tại phim **{$this->movie->name}**:")
-            ->line('"' . mb_substr($this->replyComment->content, 0, 150) . '..."')
+            ->line('"'.mb_substr($this->replyComment->content, 0, 150).'..."')
             ->action('Xem Bình Luận', $movieUrl)
             ->salutation('Trân trọng, Đội ngũ WebPhim');
     }

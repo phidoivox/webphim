@@ -19,7 +19,7 @@ class CommentService
     /**
      * Lấy danh sách bình luận gốc của một phim có phân trang và câu trả lời lồng nhau.
      *
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     public function getMovieComments(int $movieId, array $filters = [], ?User $currentUser = null): LengthAwarePaginator
     {
@@ -66,7 +66,7 @@ class CommentService
     /**
      * Lấy danh sách các câu trả lời cho một bình luận.
      *
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     public function getCommentReplies(int $commentId, array $filters = [], ?User $currentUser = null): LengthAwarePaginator
     {
@@ -90,7 +90,7 @@ class CommentService
     /**
      * Tạo mới một bình luận hoặc câu trả lời.
      *
-     * @param array{content: string, is_spoiler?: bool, parent_id?: int|null} $data
+     * @param  array{content: string, is_spoiler?: bool, parent_id?: int|null}  $data
      *
      * @throws ValidationException|ModelNotFoundException
      */
@@ -172,7 +172,7 @@ class CommentService
     /**
      * Cập nhật nội dung hoặc trạng thái spoiler của bình luận.
      *
-     * @param array{content?: string, is_spoiler?: bool} $data
+     * @param  array{content?: string, is_spoiler?: bool}  $data
      */
     public function updateComment(User $user, int $commentId, array $data): Comment
     {
@@ -266,7 +266,7 @@ class CommentService
     /**
      * Lấy danh sách bình luận phục vụ trang quản trị (Admin).
      *
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     public function adminGetComments(array $filters = []): LengthAwarePaginator
     {
@@ -373,7 +373,7 @@ class CommentService
     /**
      * Thao tác hàng loạt trên bình luận (Admin).
      *
-     * @param array<int> $ids
+     * @param  array<int>  $ids
      */
     public function adminBulkAction(string $action, array $ids): int
     {

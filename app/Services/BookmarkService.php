@@ -57,12 +57,12 @@ class BookmarkService
             ->with(['movie.genres']);
 
         // 1. Lọc theo loại (favorite / watchlater)
-        if (!empty($filters['type'])) {
+        if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);
         }
 
         // 2. Tìm kiếm theo tên phim
-        if (!empty($filters['q'])) {
+        if (! empty($filters['q'])) {
             $search = trim($filters['q']);
             $query->whereHas('movie', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -100,6 +100,7 @@ class BookmarkService
 
         if ($type) {
             $isBookmarked = $query->where('type', $type)->exists();
+
             return [
                 'isBookmarked' => $isBookmarked,
                 'type' => $type,

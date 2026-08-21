@@ -11,6 +11,7 @@ class Bookmark extends Model
     use HasFactory;
 
     public const TYPE_FAVORITE = 'favorite';
+
     public const TYPE_WATCHLATER = 'watchlater';
 
     protected $fillable = [
@@ -26,7 +27,6 @@ class Bookmark extends Model
             'movie_id' => 'integer',
         ];
     }
-
 
     public function user(): BelongsTo
     {

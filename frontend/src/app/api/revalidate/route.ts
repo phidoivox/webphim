@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const revalidatedTags: string[] = [];
 
     for (const t of tags) {
-      revalidateTag(t);
+      revalidateTag(t, { expire: 0 });
       revalidatedTags.push(t);
     }
 
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (tag) {
-    revalidateTag(tag);
+    revalidateTag(tag, { expire: 0 });
   }
 
   if (path) {

@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -14,7 +13,7 @@ class AuthService
     /**
      * Đăng ký tài khoản người dùng mới.
      *
-     * @param array{name: string, email: string, password: string} $data
+     * @param  array{name: string, email: string, password: string}  $data
      * @return array{user: User, token: string}
      */
     public function register(array $data): array

@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Cache;
 class HomeService
 {
     public const CACHE_KEY = 'home:payload';
+
     public const CACHE_FRESH_TTL = 300;  // 5 phút — dữ liệu tươi
+
     public const CACHE_STALE_TTL = 600;  // 10 phút — phục vụ stale trong khi refresh nền
 
     /**

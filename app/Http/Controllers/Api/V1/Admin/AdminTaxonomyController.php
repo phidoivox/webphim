@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Country;
 use App\Models\Genre;
 use App\Models\Person;
-use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;

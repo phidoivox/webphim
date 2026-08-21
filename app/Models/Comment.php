@@ -15,7 +15,9 @@ class Comment extends Model
     use HasFactory, SoftDeletes;
 
     public const STATUS_ACTIVE = 'active';
+
     public const STATUS_HIDDEN = 'hidden';
+
     public const STATUS_SPAM = 'spam';
 
     protected $fillable = [
@@ -109,4 +111,3 @@ class Comment extends Model
         return $this->likedUsers()->where('users.id', $user->id)->exists();
     }
 }
-

@@ -50,7 +50,7 @@ class MovieObserver
         Cache::forget('home:payload');
 
         // Invalidate movie detail cache
-        if (!empty($movie->slug)) {
+        if (! empty($movie->slug)) {
             Cache::forget("movie:{$movie->slug}");
         }
 
@@ -62,7 +62,7 @@ class MovieObserver
                 $secret = env('REVALIDATION_SECRET', 'webphim_secret_revalidate_2026');
 
                 $tags = ['home', 'movies'];
-                if (!empty($slug)) {
+                if (! empty($slug)) {
                     $tags[] = "movie-{$slug}";
                 }
 

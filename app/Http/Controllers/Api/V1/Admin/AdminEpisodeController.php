@@ -9,6 +9,7 @@ use App\Http\Requests\Api\V1\Admin\UpdateEpisodeRequest;
 use App\Models\Episode;
 use App\Models\EpisodeServer;
 use App\Models\Movie;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -89,7 +90,7 @@ class AdminEpisodeController extends Controller
         });
 
         // Tự động gửi thông báo tập mới cho các user đã lưu phim vào tủ phim
-        app(\App\Services\NotificationService::class)->notifyNewEpisode($episode);
+        app(NotificationService::class)->notifyNewEpisode($episode);
 
         return response()->json([
             'status' => 'success',
