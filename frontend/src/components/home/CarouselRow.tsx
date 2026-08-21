@@ -39,11 +39,14 @@ export default function CarouselRow({ section }: { section: CarouselSection }) {
       </div>
       <div
         ref={scrollerRef}
-        className="@container flex snap-x gap-3 overflow-x-auto px-4 pt-6 pb-8 -my-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:px-10"
+        className="flex snap-x gap-3 overflow-x-auto px-4 pt-6 pb-8 -my-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:px-10"
       >
         {section.movies.map((movie) => (
-          <div key={movie.id} className="@container snap-start shrink-0">
-            <MovieCard movie={movie} className="w-[140px] sm:w-[160px] lg:w-[175px]" />
+          <div
+            key={movie.id}
+            className="snap-start shrink-0 w-[140px] sm:w-[160px] lg:w-[175px]"
+          >
+            <MovieCard movie={movie} className="w-full" />
           </div>
         ))}
       </div>

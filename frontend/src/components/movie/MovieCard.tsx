@@ -89,7 +89,7 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
       ref={containerRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={cn("@container relative movie-card-contain", className)}
+      className={cn("@container relative w-full", className)}
     >
 
       <Link href={`/phim/${movie.slug}`} className="group block w-full">
