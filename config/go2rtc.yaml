@@ -1,0 +1,16 @@
+# go2rtc default configuration for NVR
+api:
+  listen: ":1984"
+
+webrtc:
+  listen: ":8555"
+
+rtsp:
+  listen: ":8554"
+
+streams:
+  # Example stream configuration:
+  # cam_gate_01:
+  #   - rtsp://admin:pass@192.168.1.100:554/stream1
+  # cam_gate_01_sub:
+  #   - rtsp://admin:pass@192.168.1.100:554/stream2

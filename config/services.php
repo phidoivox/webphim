@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'frontend' => [
+        'url' => env('FRONTEND_URL', 'http://localhost:3000'),
+        'revalidation_secret' => env('REVALIDATION_SECRET', 'webphim_secret_revalidate_2026'),
+    ],
+
 ];
