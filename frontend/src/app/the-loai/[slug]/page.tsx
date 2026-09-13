@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFilteredMovies } from "@/lib/api";
-import { getCachedGenres } from "@/lib/cached-content";
+import { getCachedCountries, getCachedGenres } from "@/lib/cached-content";
 import { GENRES } from "@/data/genres";
 import MovieCategoryView from "@/components/movie/MovieCategoryView";
 
@@ -26,8 +26,9 @@ async function GenreContent({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const sParams = await searchParams;
 
-  const [genres, moviesData] = await Promise.all([
+  const [genres, countries, moviesData] = await Promise.all([
     getCachedGenres().catch(() => []),
+    getCachedCountries().catch(() => []),
     getFilteredMovies({
       genre: slug,
       type: sParams.type,
@@ -61,7 +62,8 @@ async function GenreContent({ params, searchParams }: PageProps) {
   return (
     <MovieCategoryView
       title={`Phim ${genreName}`}
-      subtitle={`Tuyển tập các bộ phim thể loại ${genreName} mới nhất và hay nhất`}
+      genres={genres}
+      countries={countries}
       movies={moviesData.data}
       pagination={moviesData.meta}
       currentParams={{
@@ -71,6 +73,7 @@ async function GenreContent({ params, searchParams }: PageProps) {
         year: sParams.year,
         sort: sParams.sort,
       }}
+      showGenreFilter={false}
     />
   );
 }
