@@ -6,6 +6,7 @@ use App\Models\Comment;
 use App\Models\Movie;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -139,6 +140,36 @@ class CommentTest extends TestCase
         $this->assertEquals(0, $comment->fresh()->likes_count);
     }
 
+    public function test_unlike_only_decrements_single_comment(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $commentA = Comment::create([
+            'movie_id' => $this->movie->id,
+            'user_id' => $this->user->id,
+            'content' => 'Bình luận A',
+            'status' => 'active',
+        ]);
+        $commentB = Comment::create([
+            'movie_id' => $this->movie->id,
+            'user_id' => $this->user->id,
+            'content' => 'Bình luận B',
+            'status' => 'active',
+        ]);
+
+        $this->postJson("/api/v1/comments/{$commentA->id}/like")->assertOk();
+        $this->postJson("/api/v1/comments/{$commentB->id}/like")->assertOk();
+        $this->assertEquals(1, $commentA->fresh()->likes_count);
+        $this->assertEquals(1, $commentB->fresh()->likes_count);
+
+        $this->postJson("/api/v1/comments/{$commentA->id}/like")
+            ->assertOk()
+            ->assertJsonPath('data.likesCount', 0);
+
+        $this->assertEquals(0, $commentA->fresh()->likes_count);
+        $this->assertEquals(1, $commentB->fresh()->likes_count);
+    }
+
     public function test_user_can_delete_own_comment_but_not_others(): void
     {
         $otherUser = User::factory()->create(['role' => 'user']);
@@ -160,5 +191,26 @@ class CommentTest extends TestCase
             ->assertOk();
 
         $this->assertSoftDeleted('comments', ['id' => $comment->id]);
+    }
+
+    public function test_authenticated_comment_list_uses_cached_base_with_overlay(): void
+    {
+        Sanctum::actingAs($this->user);
+        $comment = Comment::create(['movie_id' => $this->movie->id, 'user_id' => $this->user->id, 'content' => 'Overlay test', 'status' => 'active']);
+
+        DB::enableQueryLog();
+        $res1 = $this->getJson("/api/v1/movies/{$this->movie->slug}/comments");
+        $res1->assertOk()->assertJsonPath('data.0.isLiked', false);
+        $firstQueries = count(DB::getQueryLog());
+
+        DB::flushQueryLog();
+        $this->postJson("/api/v1/comments/{$comment->id}/like")->assertOk();
+        DB::flushQueryLog();
+
+        $res2 = $this->getJson("/api/v1/movies/{$this->movie->slug}/comments");
+        $res2->assertOk()->assertJsonPath('data.0.isLiked', true);
+
+        // Overlay chỉ thêm batch likes query, không N+1 per-comment
+        $this->assertLessThanOrEqual($firstQueries + 2, count(DB::getQueryLog()));
     }
 }

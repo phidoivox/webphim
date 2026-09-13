@@ -22,32 +22,26 @@ class CommentController extends Controller
     /**
      * Danh sách bình luận gốc của một phim (kèm câu trả lời lồng nhau và trạng thái like).
      */
-    public function index(Request $request, string|int $movie): JsonResponse
+    public function index(Request $request, Movie $movie): JsonResponse
     {
-        $movieId = is_numeric($movie)
-            ? (int) $movie
-            : Movie::where('slug', $movie)->value('id');
+        $currentUser = $request->user('sanctum');
 
-        if (! $movieId) {
+        if (! $currentUser) {
+            $payload = $this->commentService->getMovieCommentsPayload($movie->id, $request->all());
+
             return response()->json([
-                'status' => 'error',
-                'message' => 'Không tìm thấy bộ phim yêu cầu.',
-            ], 404);
+                'status' => 'success',
+                'data' => $payload['data'],
+                'meta' => $payload['meta'],
+            ]);
         }
 
-        $currentUser = $request->user('sanctum');
-        $paginator = $this->commentService->getMovieComments($movieId, $request->all(), $currentUser);
+        $paginator = $this->commentService->getMovieCommentsForUser($movie->id, $request->all(), $currentUser);
 
         return response()->json([
             'status' => 'success',
-            'data' => CommentResource::collection($paginator->items()),
-            'meta' => [
-                'currentPage' => $paginator->currentPage(),
-                'lastPage' => $paginator->lastPage(),
-                'perPage' => $paginator->perPage(),
-                'total' => $paginator->total(),
-                'hasMore' => $paginator->hasMorePages(),
-            ],
+            'data' => $paginator['data'],
+            'meta' => $paginator['meta'],
         ]);
     }
 
@@ -59,37 +53,16 @@ class CommentController extends Controller
         $currentUser = $request->user('sanctum');
         $paginator = $this->commentService->getCommentReplies($id, $request->all(), $currentUser);
 
-        return response()->json([
-            'status' => 'success',
-            'data' => CommentResource::collection($paginator->items()),
-            'meta' => [
-                'currentPage' => $paginator->currentPage(),
-                'lastPage' => $paginator->lastPage(),
-                'perPage' => $paginator->perPage(),
-                'total' => $paginator->total(),
-                'hasMore' => $paginator->hasMorePages(),
-            ],
-        ]);
+        return response()->paginated($paginator, CommentResource::class);
     }
 
     /**
      * Đăng bình luận mới hoặc gửi câu trả lời.
      */
-    public function store(StoreCommentRequest $request, string|int $movie): JsonResponse
+    public function store(StoreCommentRequest $request, Movie $movie): JsonResponse
     {
         $user = $request->user();
-        $movieId = is_numeric($movie)
-            ? (int) $movie
-            : Movie::where('slug', $movie)->value('id');
-
-        if (! $movieId) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Không tìm thấy bộ phim yêu cầu.',
-            ], 404);
-        }
-
-        $comment = $this->commentService->storeComment($user, $movieId, $request->validated());
+        $comment = $this->commentService->storeComment($user, $movie->id, $request->validated());
 
         return response()->json([
             'status' => 'success',

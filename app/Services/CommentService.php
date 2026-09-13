@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\NotificationSentEvent;
+use App\Http\Resources\Api\V1\CommentResource;
 use App\Models\Comment;
 use App\Models\Movie;
 use App\Models\User;
@@ -10,6 +11,7 @@ use App\Notifications\CommentLikeNotification;
 use App\Notifications\CommentReplyNotification;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -25,6 +27,7 @@ class CommentService
     {
         $perPage = min(max((int) ($filters['per_page'] ?? 15), 1), 50);
         $sort = (string) ($filters['sort'] ?? 'latest');
+        $page = isset($filters['page']) ? (int) $filters['page'] : null;
 
         $query = Comment::query()
             ->forMovie($movieId)
@@ -32,11 +35,12 @@ class CommentService
             ->active()
             ->with(['user:id,name,role,avatar_url']);
 
-        // Eager load danh sách câu trả lời con (kèm thông tin user và like của user hiện tại)
+        // Eager load tối đa 3 replies mới nhất mỗi root — trang full qua endpoint replies riêng
         $query->with(['replies' => function ($rq) use ($currentUser) {
             $rq->active()
                 ->with(['user:id,name,role,avatar_url'])
-                ->orderBy('created_at', 'asc');
+                ->orderBy('created_at', 'asc')
+                ->limit(3);
 
             if ($currentUser) {
                 $rq->withExists(['likedUsers as is_liked' => function ($lq) use ($currentUser) {
@@ -60,7 +64,69 @@ class CommentService
             $query->orderByDesc('created_at');
         }
 
-        return $query->paginate($perPage);
+        return $query->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    /**
+     * Lấy danh sách bình luận phim cho khách (không đăng nhập) có cache SWR Redis.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{data: array<int, mixed>, meta: array<string, mixed>}
+     */
+    public function getMovieCommentsPayload(int $movieId, array $filters = []): array
+    {
+        ksort($filters);
+        $page = (int) ($filters['page'] ?? 1);
+        $perPage = min(max((int) ($filters['per_page'] ?? 15), 1), 50);
+        $sort = (string) ($filters['sort'] ?? 'latest');
+        $cacheKey = "comments:movie:{$movieId}:page:{$page}:per_page:{$perPage}:sort:{$sort}";
+
+        return Cache::tags(['comments', "movie:{$movieId}:comments"])->flexible($cacheKey, [120, 300], function () use ($movieId, $filters) {
+            $paginator = $this->getMovieComments($movieId, $filters, null);
+
+            return [
+                'data' => CommentResource::collection($paginator->items())->resolve(),
+                'meta' => [
+                    'currentPage' => $paginator->currentPage(),
+                    'lastPage' => $paginator->lastPage(),
+                    'perPage' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                    'hasMore' => $paginator->hasMorePages(),
+                ],
+            ];
+        });
+    }
+
+    /**
+     * Lấy danh sách bình luận phim cho người dùng đã đăng nhập dựa trên cached base + overlay batch like.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{data: array<int, mixed>, meta: array<string, mixed>}
+     */
+    public function getMovieCommentsForUser(int $movieId, array $filters, User $user): array
+    {
+        $base = $this->getMovieCommentsPayload($movieId, $filters);
+        $ids = collect($base['data'])->pluck('id')->all();
+        $liked = empty($ids) ? [] : DB::table('comment_likes')
+            ->where('user_id', $user->id)
+            ->whereIn('comment_id', $ids)
+            ->pluck('comment_id')
+            ->all();
+        $likedSet = array_flip($liked);
+
+        foreach ($base['data'] as &$row) {
+            $row['isLiked'] = isset($likedSet[$row['id']]);
+        }
+
+        return $base;
+    }
+
+    /**
+     * Xóa cache bình luận của một bộ phim.
+     */
+    public function clearMovieCommentsCache(int $movieId): void
+    {
+        Cache::tags(["movie:{$movieId}:comments"])->flush();
     }
 
     /**
@@ -165,6 +231,8 @@ class CommentService
             $comment->load('user:id,name,role,avatar_url');
             $comment->is_liked = false;
 
+            $this->clearMovieCommentsCache($movie->id);
+
             return $comment;
         });
     }
@@ -187,6 +255,7 @@ class CommentService
         }
 
         $comment->update($updateData);
+        $this->clearMovieCommentsCache($comment->movie_id);
 
         return $comment;
     }
@@ -197,8 +266,9 @@ class CommentService
     public function deleteComment(User $user, int $commentId): bool
     {
         $comment = Comment::query()->findOrFail($commentId);
+        $movieId = $comment->movie_id;
 
-        return DB::transaction(function () use ($comment) {
+        return DB::transaction(function () use ($comment, $movieId) {
             $parentId = $comment->parent_id;
 
             $deleted = $comment->delete();
@@ -208,6 +278,8 @@ class CommentService
                     ->where('replies_count', '>', 0)
                     ->decrement('replies_count');
             }
+
+            $this->clearMovieCommentsCache($movieId);
 
             return (bool) $deleted;
         });
@@ -221,44 +293,42 @@ class CommentService
     public function toggleLike(User $user, int $commentId): array
     {
         $comment = Comment::query()->with(['user', 'movie'])->findOrFail($commentId);
+        $movieId = $comment->movie_id;
 
-        return DB::transaction(function () use ($user, $comment) {
-            $isLiked = $comment->likedUsers()->where('users.id', $user->id)->exists();
+        return DB::transaction(function () use ($user, $comment, $movieId) {
+            $toggled = $comment->likedUsers()->toggle([$user->id => ['created_at' => now()]]);
+            $isLiked = count($toggled['attached']) > 0;
 
             if ($isLiked) {
-                $comment->likedUsers()->detach($user->id);
-                $comment->decrement('likes_count');
-                $newLikedStatus = false;
-            } else {
-                $comment->likedUsers()->attach($user->id, ['created_at' => now()]);
                 $comment->increment('likes_count');
-                $newLikedStatus = true;
+            } else {
+                Comment::whereKey($comment->id)->where('likes_count', '>', 0)->decrement('likes_count');
+            }
+            $likesCount = (int) $comment->fresh()->likes_count;
+            $this->clearMovieCommentsCache($movieId);
 
-                // Gửi thông báo cho tác giả bình luận khi có lượt thích mới (nếu không phải tự like chính mình)
-                if ($comment->user && $comment->user_id !== $user->id && $comment->user->is_active && $comment->movie) {
-                    $commentUser = $comment->user;
-                    $commentMovie = $comment->movie;
-                    defer(function () use ($commentUser, $user, $comment, $commentMovie) {
-                        $commentUser->notify(new CommentLikeNotification($user, $comment, $commentMovie));
+            // Gửi thông báo cho tác giả bình luận khi có lượt thích mới (nếu không phải tự like chính mình)
+            if ($isLiked && $comment->user && $comment->user_id !== $user->id && $comment->user->is_active && $comment->movie) {
+                $commentUser = $comment->user;
+                $commentMovie = $comment->movie;
+                defer(function () use ($commentUser, $user, $comment, $commentMovie) {
+                    $commentUser->notify(new CommentLikeNotification($user, $comment, $commentMovie));
 
-                        try {
-                            $unread = $commentUser->unreadNotifications()->count();
-                            $latest = $commentUser->notifications()->latest()->first();
-                            if ($latest) {
-                                broadcast(new NotificationSentEvent($commentUser->id, NotificationService::formatNotification($latest), $unread));
-                            }
-                        } catch (\Throwable $e) {
-                            Log::error('Broadcast like error: '.$e->getMessage());
+                    try {
+                        $unread = $commentUser->unreadNotifications()->count();
+                        $latest = $commentUser->notifications()->latest()->first();
+                        if ($latest) {
+                            broadcast(new NotificationSentEvent($commentUser->id, NotificationService::formatNotification($latest), $unread));
                         }
-                    })->always();
-                }
+                    } catch (\Throwable $e) {
+                        Log::error('Broadcast like error: '.$e->getMessage());
+                    }
+                })->always();
             }
 
-            $currentLikesCount = (int) $comment->fresh()->likes_count;
-
             return [
-                'isLiked' => $newLikedStatus,
-                'likesCount' => max(0, $currentLikesCount),
+                'isLiked' => $isLiked,
+                'likesCount' => $likesCount,
             ];
         });
     }
@@ -326,6 +396,7 @@ class CommentService
         }
 
         $comment->update(['status' => $status]);
+        $this->clearMovieCommentsCache($comment->movie_id);
 
         return $comment;
     }
@@ -340,6 +411,7 @@ class CommentService
         $comment->update([
             'is_pinned' => ! $comment->is_pinned,
         ]);
+        $this->clearMovieCommentsCache($comment->movie_id);
 
         return $comment;
     }
@@ -350,9 +422,11 @@ class CommentService
     public function adminDeleteComment(int $commentId, bool $force = false): bool
     {
         $comment = Comment::withTrashed()->findOrFail($commentId);
+        $movieId = $comment->movie_id;
 
-        return DB::transaction(function () use ($comment, $force) {
+        return DB::transaction(function () use ($comment, $movieId, $force) {
             $parentId = $comment->parent_id;
+            $wasTrashed = $comment->trashed();
 
             if ($force) {
                 $deleted = $comment->forceDelete();
@@ -360,11 +434,14 @@ class CommentService
                 $deleted = $comment->delete();
             }
 
-            if ($deleted && $parentId) {
+            // Chỉ giảm replies_count nếu comment chưa từng bị xóa mềm trước đó
+            if ($deleted && $parentId && ! $wasTrashed) {
                 Comment::where('id', $parentId)
                     ->where('replies_count', '>', 0)
                     ->decrement('replies_count');
             }
+
+            $this->clearMovieCommentsCache($movieId);
 
             return (bool) $deleted;
         });
@@ -381,14 +458,46 @@ class CommentService
             return 0;
         }
 
-        return match ($action) {
-            'activate' => Comment::whereIn('id', $ids)->update(['status' => Comment::STATUS_ACTIVE]),
-            'hide' => Comment::whereIn('id', $ids)->update(['status' => Comment::STATUS_HIDDEN]),
-            'spam' => Comment::whereIn('id', $ids)->update(['status' => Comment::STATUS_SPAM]),
-            'delete' => Comment::whereIn('id', $ids)->delete(),
-            default => throw ValidationException::withMessages([
-                'action' => 'Hành động hàng loạt không hợp lệ.',
-            ]),
-        };
+        $movieIds = Comment::withTrashed()->whereIn('id', $ids)->pluck('movie_id')->unique()->all();
+
+        $result = DB::transaction(function () use ($action, $ids) {
+            return match ($action) {
+                'activate' => Comment::whereIn('id', $ids)->update(['status' => Comment::STATUS_ACTIVE]),
+                'hide' => Comment::whereIn('id', $ids)->update(['status' => Comment::STATUS_HIDDEN]),
+                'spam' => Comment::whereIn('id', $ids)->update(['status' => Comment::STATUS_SPAM]),
+                'delete' => $this->bulkDeleteComments($ids),
+                default => throw ValidationException::withMessages([
+                    'action' => 'Hành động hàng loạt không hợp lệ.',
+                ]),
+            };
+        });
+
+        foreach ($movieIds as $mId) {
+            $this->clearMovieCommentsCache($mId);
+        }
+
+        return $result;
+    }
+
+    protected function bulkDeleteComments(array $ids): int
+    {
+        $comments = Comment::whereIn('id', $ids)->get();
+        $count = 0;
+
+        foreach ($comments as $comment) {
+            $parentId = $comment->parent_id;
+            $wasTrashed = $comment->trashed();
+
+            if ($comment->delete()) {
+                if ($parentId && ! $wasTrashed) {
+                    Comment::where('id', $parentId)
+                        ->where('replies_count', '>', 0)
+                        ->decrement('replies_count');
+                }
+                $count++;
+            }
+        }
+
+        return $count;
     }
 }
