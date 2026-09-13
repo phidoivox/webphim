@@ -85,7 +85,7 @@ class BookmarkService
             default => $query->orderBy('created_at', 'desc'),
         };
 
-        $perPage = min((int) ($filters['per_page'] ?? 24), 50);
+        $perPage = min(max((int) ($filters['per_page'] ?? 24), 1), 50);
 
         return $query->paginate($perPage);
     }

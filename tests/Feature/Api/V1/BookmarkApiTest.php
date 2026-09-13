@@ -323,6 +323,15 @@ class BookmarkApiTest extends TestCase
         $this->assertEquals(0, Bookmark::where('user_id', $this->user->id)->count());
     }
 
+    public function test_bookmark_list_clamps_invalid_per_page(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        $this->getJson('/api/v1/bookmarks?per_page=0')->assertOk()->assertJsonPath('meta.perPage', 1);
+        $this->getJson('/api/v1/bookmarks?per_page=-5')->assertOk()->assertJsonPath('meta.perPage', 1);
+        $this->getJson('/api/v1/bookmarks?per_page=999')->assertOk()->assertJsonPath('meta.perPage', 50);
+    }
+
     public function test_user_can_merge_guest_bookmarks_on_login(): void
     {
         Sanctum::actingAs($this->user);
