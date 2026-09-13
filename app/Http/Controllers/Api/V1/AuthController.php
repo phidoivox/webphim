@@ -24,7 +24,7 @@ class AuthController extends Controller
     {
         $result = $this->authService->register($request->validated());
 
-        return response()->json([
+        $response = response()->json([
             'status' => 'success',
             'message' => 'Đăng ký tài khoản thành công!',
             'data' => [
@@ -32,6 +32,8 @@ class AuthController extends Controller
                 'token' => $result['token'],
             ],
         ], 201);
+
+        return $this->withAuthCookie($response, $result['token'], true);
     }
 
     /**
@@ -39,14 +41,15 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
+        $remember = (bool) $request->boolean('remember_me', true);
         $result = $this->authService->login(
             (string) $request->input('email'),
             (string) $request->input('password'),
             $request->input('device_name'),
-            (bool) $request->boolean('remember_me', true),
+            $remember,
         );
 
-        return response()->json([
+        $response = response()->json([
             'status' => 'success',
             'message' => 'Đăng nhập thành công!',
             'data' => [
@@ -54,6 +57,8 @@ class AuthController extends Controller
                 'token' => $result['token'],
             ],
         ], 200);
+
+        return $this->withAuthCookie($response, $result['token'], $remember);
     }
 
     /**
@@ -77,7 +82,7 @@ class AuthController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Đăng xuất thành công.',
-        ], 200);
+        ], 200)->withoutCookie('auth_token');
     }
 
     public function logoutAll(Request $request): JsonResponse
@@ -90,6 +95,15 @@ class AuthController extends Controller
             'status' => 'success',
             'message' => 'Đã đăng xuất khỏi tất cả thiết bị.',
             'data' => ['revokedCount' => $count],
-        ], 200);
+        ], 200)->withoutCookie('auth_token');
+    }
+
+    private function withAuthCookie(JsonResponse $response, string $token, bool $remember): JsonResponse
+    {
+        $minutes = $remember ? 60 * 24 * 30 : 60 * 24;
+
+        return $response->withCookie(cookie(
+            'auth_token', $token, $minutes, '/', null, app()->isProduction(), true, false, 'Lax'
+        ));
     }
 }

@@ -25,6 +25,7 @@ export interface LoginPayload {
   email: string;
   password: string;
   device_name?: string;
+  remember_me?: boolean;
 }
 
 export interface RegisterPayload {

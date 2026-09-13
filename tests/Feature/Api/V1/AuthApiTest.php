@@ -229,4 +229,59 @@ class AuthApiTest extends TestCase
         $shortToken = $user->tokens()->latest('id')->first();
         $this->assertEqualsWithDelta(now()->addHours(24)->timestamp, $shortToken->expires_at->timestamp, 120);
     }
+
+    public function test_login_sets_httponly_auth_cookie(): void
+    {
+        User::factory()->create(['email' => 'cookie@example.com', 'password' => 'secret123', 'is_active' => true]);
+
+        $response = $this->postJson('/api/v1/auth/login', ['email' => 'cookie@example.com', 'password' => 'secret123']);
+        $response->assertOk();
+        $cookie = $response->headers->getCookies()[0] ?? null;
+        $this->assertNotNull($cookie);
+        $this->assertSame('auth_token', $cookie->getName());
+        $this->assertTrue($cookie->isHttpOnly());
+        $this->assertNotEmpty($response->json('data.token'));
+    }
+
+    public function test_register_sets_httponly_auth_cookie(): void
+    {
+        $payload = [
+            'name' => 'Cookie User',
+            'email' => 'cookie_reg@example.com',
+            'password' => 'matkhau123',
+            'password_confirmation' => 'matkhau123',
+        ];
+
+        $response = $this->postJson('/api/v1/auth/register', $payload);
+        $response->assertStatus(201);
+        $cookie = $response->headers->getCookies()[0] ?? null;
+        $this->assertNotNull($cookie);
+        $this->assertSame('auth_token', $cookie->getName());
+        $this->assertTrue($cookie->isHttpOnly());
+    }
+
+    public function test_logout_clears_auth_cookie(): void
+    {
+        $user = User::factory()->create();
+        $token = $user->createToken('logout_cookie_token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/v1/auth/logout');
+
+        $response->assertOk();
+        $response->assertCookieExpired('auth_token');
+    }
+
+    public function test_logout_all_clears_auth_cookie(): void
+    {
+        $user = User::factory()->create();
+        $token = $user->createToken('logout_all_cookie_token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/v1/auth/logout-all');
+
+        $response->assertOk();
+        $response->assertCookieExpired('auth_token');
+    }
 }
+

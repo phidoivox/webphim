@@ -41,6 +41,7 @@ export default function LoginForm() {
       await login({
         email: data.email.trim(),
         password: data.password,
+        remember_me: data.rememberMe,
       });
       toast.success("Đăng nhập thành công!");
       router.push(redirectUrl);
