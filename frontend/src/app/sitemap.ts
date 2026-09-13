@@ -1,27 +1,26 @@
 import type { MetadataRoute } from "next";
-import { getFilteredMovies, getGenres, getCountries } from "@/lib/api";
+import { getFilteredMovies } from "@/lib/api";
+import { getCachedCountries, getCachedGenres } from "@/lib/cached-content";
+import { getSiteUrl } from "@/lib/env";
 import { GENRES } from "@/data/genres";
 import { COUNTRIES } from "@/data/countries";
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://webphim.test";
-
+const BASE_URL = getSiteUrl();
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [genresRes, countriesRes, moviesResult] = await Promise.all([
-    getGenres().catch(() => []),
-    getCountries().catch(() => []),
-    getFilteredMovies({ per_page: 50 }).catch(() => ({ data: [] })),
+    getCachedGenres().catch(() => []),
+    getCachedCountries().catch(() => []),
+    getFilteredMovies({ per_page: 1 }).catch(() => null),
   ]);
 
   const genresList = Array.isArray(genresRes) && genresRes.length > 0 ? genresRes : GENRES;
   const countriesList = Array.isArray(countriesRes) && countriesRes.length > 0 ? countriesRes : COUNTRIES;
-  const moviesList = Array.isArray(moviesResult?.data) ? moviesResult.data : [];
 
-  const movieUrls: MetadataRoute.Sitemap = moviesList.map((m) => ({
-    url: `${BASE_URL}/phim/${m.slug}`,
+  const moviePages = Math.max(1, Math.ceil((moviesResult?.meta?.total ?? 0) / 1000));
+  const xmlIndex: MetadataRoute.Sitemap = [...Array(moviePages)].map((_, i) => ({
+    url: `${BASE_URL}/sitemap/movies/${i + 1}`,
     lastModified: new Date(),
-    changeFrequency: "daily",
-    priority: 0.9,
   }));
 
   const genreUrls: MetadataRoute.Sitemap = genresList.map((g) => ({
@@ -46,5 +45,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/tim-kiem`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.6 },
   ];
 
-  return [...staticUrls, ...movieUrls, ...genreUrls, ...countryUrls];
+  return [...staticUrls, ...xmlIndex, ...genreUrls, ...countryUrls];
 }
