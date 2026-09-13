@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import EpisodeGrid from "@/components/movie/EpisodeGrid";
-import CommentSection from "@/components/movie/comments/CommentSection";
 import { QualityBadge } from "@/components/ui/QualityBadge";
 import { GenreBadge } from "@/components/ui/GenreBadge";
 import {
@@ -15,6 +14,11 @@ import {
 } from "@/components/ui/icons";
 import type { Credit, MovieDetail } from "@/types/movie";
 import { ServerIconComponent } from "@/components/movie/ServerBadge";
+
+const CommentSection = dynamic(() => import("@/components/movie/comments/CommentSection"), {
+  ssr: false,
+  loading: () => <div className="h-40 animate-pulse rounded-xl bg-white/5" />,
+});
 
 // Dynamic import PlayerShell with SSR disabled to keep hls.js out of main bundle
 const PlayerShell = dynamic(() => import("@/components/player/PlayerShell"), {

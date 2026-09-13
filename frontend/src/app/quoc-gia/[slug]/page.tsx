@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCountries, getFilteredMovies, getGenres } from "@/lib/api";
+import { getFilteredMovies } from "@/lib/api";
+import { getCachedCountries } from "@/lib/cached-content";
 import { COUNTRIES } from "@/data/countries";
 import MovieCategoryView from "@/components/movie/MovieCategoryView";
 
@@ -25,9 +26,26 @@ async function CountryContent({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const sParams = await searchParams;
 
-  const [genres, countries] = await Promise.all([
-    getGenres().catch(() => []),
-    getCountries().catch(() => []),
+  const [countries, moviesData] = await Promise.all([
+    getCachedCountries().catch(() => []),
+    getFilteredMovies({
+      country: slug,
+      type: sParams.type,
+      genre: sParams.genre,
+      year: sParams.year,
+      sort: sParams.sort || "latest",
+      page: sParams.page || "1",
+      per_page: "32",
+    }).catch(() => ({
+      data: [],
+      meta: {
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 32,
+        total: 0,
+        hasMore: false,
+      },
+    })),
   ]);
 
   const currentCountry =
@@ -38,32 +56,12 @@ async function CountryContent({ params, searchParams }: PageProps) {
     notFound();
   }
 
-  const moviesData = await getFilteredMovies({
-    country: slug,
-    type: sParams.type,
-    genre: sParams.genre,
-    year: sParams.year,
-    sort: sParams.sort || "latest",
-    page: sParams.page || "1",
-    per_page: "32",
-  }).catch(() => ({
-    data: [],
-    meta: {
-      currentPage: 1,
-      lastPage: 1,
-      perPage: 32,
-      total: 0,
-      hasMore: false,
-    },
-  }));
-
   const countryName = "name" in currentCountry ? currentCountry.name : currentCountry.label;
 
   return (
     <MovieCategoryView
       title={`Phim ${countryName}`}
-      genres={genres}
-      countries={countries}
+      subtitle={`Tuyển tập các bộ phim ${countryName} mới nhất và hấp dẫn nhất`}
       movies={moviesData.data}
       pagination={moviesData.meta}
       currentParams={{
@@ -73,7 +71,6 @@ async function CountryContent({ params, searchParams }: PageProps) {
         year: sParams.year,
         sort: sParams.sort,
       }}
-      showCountryFilter={false}
     />
   );
 }

@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCountries, getFilteredMovies, getGenres } from "@/lib/api";
+import { getFilteredMovies } from "@/lib/api";
+import { getCachedGenres } from "@/lib/cached-content";
 import { GENRES } from "@/data/genres";
 import MovieCategoryView from "@/components/movie/MovieCategoryView";
 
@@ -25,9 +26,26 @@ async function GenreContent({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const sParams = await searchParams;
 
-  const [genres, countries] = await Promise.all([
-    getGenres().catch(() => []),
-    getCountries().catch(() => []),
+  const [genres, moviesData] = await Promise.all([
+    getCachedGenres().catch(() => []),
+    getFilteredMovies({
+      genre: slug,
+      type: sParams.type,
+      country: sParams.country,
+      year: sParams.year,
+      sort: sParams.sort || "latest",
+      page: sParams.page || "1",
+      per_page: "32",
+    }).catch(() => ({
+      data: [],
+      meta: {
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 32,
+        total: 0,
+        hasMore: false,
+      },
+    })),
   ]);
 
   const currentGenre =
@@ -38,32 +56,12 @@ async function GenreContent({ params, searchParams }: PageProps) {
     notFound();
   }
 
-  const moviesData = await getFilteredMovies({
-    genre: slug,
-    type: sParams.type,
-    country: sParams.country,
-    year: sParams.year,
-    sort: sParams.sort || "latest",
-    page: sParams.page || "1",
-    per_page: "32",
-  }).catch(() => ({
-    data: [],
-    meta: {
-      currentPage: 1,
-      lastPage: 1,
-      perPage: 32,
-      total: 0,
-      hasMore: false,
-    },
-  }));
-
   const genreName = "name" in currentGenre ? currentGenre.name : currentGenre.label;
 
   return (
     <MovieCategoryView
       title={`Phim ${genreName}`}
-      genres={genres}
-      countries={countries}
+      subtitle={`Tuyển tập các bộ phim thể loại ${genreName} mới nhất và hay nhất`}
       movies={moviesData.data}
       pagination={moviesData.meta}
       currentParams={{
@@ -73,7 +71,6 @@ async function GenreContent({ params, searchParams }: PageProps) {
         year: sParams.year,
         sort: sParams.sort,
       }}
-      showGenreFilter={false}
     />
   );
 }

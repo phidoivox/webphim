@@ -190,7 +190,6 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
                   src={movie.posterUrl}
                   alt={movie.name}
                   fill
-                  priority
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 256px, 260px"
                   className="object-cover"
                 />
