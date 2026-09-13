@@ -4,13 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\MovieFilterRequest;
-use App\Http\Resources\Api\V1\MovieDetailResource;
-use App\Http\Resources\Api\V1\MovieSummaryResource;
-use App\Http\Resources\Api\V1\PersonSearchResource;
 use App\Services\MovieService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class MovieController extends Controller
 {
@@ -23,20 +19,16 @@ class MovieController extends Controller
      */
     public function index(MovieFilterRequest $request): JsonResponse
     {
-        $paginator = $this->movieService->filterMovies(
+        $payload = $this->movieService->getFilteredMoviesPayload(
             $request->validated(),
-            $request->integer('per_page', 24)
+            $request->integer('per_page', 24),
+            $request->integer('page', 1)
         );
 
         return response()->json([
-            'data' => MovieSummaryResource::collection($paginator->items()),
-            'meta' => [
-                'currentPage' => $paginator->currentPage(),
-                'lastPage' => $paginator->lastPage(),
-                'perPage' => $paginator->perPage(),
-                'total' => $paginator->total(),
-                'hasMore' => $paginator->hasMorePages(),
-            ],
+            'status' => 'success',
+            'data' => $payload['data'],
+            'meta' => $payload['meta'],
         ]);
     }
 
@@ -47,30 +39,25 @@ class MovieController extends Controller
     {
         $keyword = (string) $request->query('q', '');
         $limit = (int) $request->query('limit', 5);
-        $result = $this->movieService->searchAll($keyword, min(max($limit, 1), 30));
+        $payload = $this->movieService->getSearchAllPayload($keyword, min(max($limit, 1), 30));
 
         return response()->json([
-            'data' => [
-                'movies' => MovieSummaryResource::collection($result['movies']),
-                'actors' => PersonSearchResource::collection($result['actors']),
-            ],
+            'data' => $payload,
         ]);
     }
 
     /**
      * Chi tiết một bộ phim theo slug.
      */
-    public function show(string $movie): MovieDetailResource
+    public function show(string $movie): JsonResponse
     {
-        $movieModel = $this->movieService->getMovieDetail($movie);
-        $similarMovies = $this->movieService->getSimilarMovies($movieModel);
+        $payload = $this->movieService->getMovieDetailPayload($movie);
 
-        // Tăng view count và ghi log ngầm sau khi HTTP response đã gửi về client
-        defer(function () use ($movieModel, $movie) {
-            $this->movieService->incrementViewCount($movieModel);
-            Log::info("Movie viewed: {$movie}");
+        // Tăng view count ngầm sau khi HTTP response đã gửi về client
+        defer(function () use ($movie) {
+            $this->movieService->incrementViewCountBySlug($movie);
         })->always();
 
-        return new MovieDetailResource($movieModel, $similarMovies);
+        return response()->json(['data' => $payload]);
     }
 }
