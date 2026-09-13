@@ -200,6 +200,21 @@ class AuthApiTest extends TestCase
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
+    public function test_user_can_revoke_all_tokens(): void
+    {
+        $user = User::factory()->create();
+        $t1 = $user->createToken('a')->plainTextToken;
+        $t2 = $user->createToken('b')->plainTextToken;
+
+        $this->withHeader('Authorization', "Bearer {$t1}")
+            ->postJson('/api/v1/auth/logout-all')
+            ->assertOk()
+            ->assertJsonPath('data.revokedCount', 2);
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->withHeader('Authorization', "Bearer {$t2}")->getJson('/api/v1/auth/me')->assertUnauthorized();
+    }
+
     public function test_login_token_expiry_follows_remember_me(): void
     {
         $user = User::factory()->create(['email' => 'ttl@example.com', 'password' => 'secret123', 'is_active' => true]);

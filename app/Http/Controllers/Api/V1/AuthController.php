@@ -9,6 +9,7 @@ use App\Http\Resources\Api\V1\AuthUserResource;
 use App\Services\AuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
@@ -76,6 +77,19 @@ class AuthController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Đăng xuất thành công.',
+        ], 200);
+    }
+
+    public function logoutAll(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $count = $this->authService->logoutAll($user);
+        Auth::forgetGuards();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Đã đăng xuất khỏi tất cả thiết bị.',
+            'data' => ['revokedCount' => $count],
         ], 200);
     }
 }

@@ -77,4 +77,9 @@ class AuthService
     {
         $user->currentAccessToken()?->delete();
     }
+
+    public function logoutAll(User $user): int
+    {
+        return (int) $user->tokens()->delete();
+    }
 }
