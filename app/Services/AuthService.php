@@ -28,7 +28,7 @@ class AuthService
                 'is_active' => true,
             ]);
 
-            $token = $user->createToken('auth_token')->plainTextToken;
+            $token = $user->createToken('auth_token', ['*'], now()->addDays(30))->plainTextToken;
 
             return [
                 'user' => $user,
@@ -45,7 +45,7 @@ class AuthService
      * @throws ValidationException
      * @throws HttpException
      */
-    public function login(string $email, string $password, ?string $deviceName = null): array
+    public function login(string $email, string $password, ?string $deviceName = null, bool $remember = true): array
     {
         $normalizedEmail = strtolower(trim($email));
         $user = User::where('email', $normalizedEmail)->first();
@@ -61,7 +61,8 @@ class AuthService
         }
 
         $tokenName = $deviceName ? trim($deviceName) : 'auth_token';
-        $token = $user->createToken($tokenName)->plainTextToken;
+        $expiresAt = $remember ? now()->addDays(30) : now()->addHours(24);
+        $token = $user->createToken($tokenName, ['*'], $expiresAt)->plainTextToken;
 
         return [
             'user' => $user,

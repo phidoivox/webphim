@@ -199,4 +199,19 @@ class AuthApiTest extends TestCase
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
+
+    public function test_login_token_expiry_follows_remember_me(): void
+    {
+        $user = User::factory()->create(['email' => 'ttl@example.com', 'password' => 'secret123', 'is_active' => true]);
+
+        $long = $this->postJson('/api/v1/auth/login', ['email' => 'ttl@example.com', 'password' => 'secret123', 'remember_me' => true]);
+        $long->assertOk();
+        $longToken = $user->tokens()->latest('id')->first();
+        $this->assertEqualsWithDelta(now()->addDays(30)->timestamp, $longToken->expires_at->timestamp, 120);
+
+        $short = $this->postJson('/api/v1/auth/login', ['email' => 'ttl@example.com', 'password' => 'secret123', 'remember_me' => false]);
+        $short->assertOk();
+        $shortToken = $user->tokens()->latest('id')->first();
+        $this->assertEqualsWithDelta(now()->addHours(24)->timestamp, $shortToken->expires_at->timestamp, 120);
+    }
 }

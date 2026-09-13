@@ -41,7 +41,8 @@ class AuthController extends Controller
         $result = $this->authService->login(
             (string) $request->input('email'),
             (string) $request->input('password'),
-            $request->input('device_name')
+            $request->input('device_name'),
+            (bool) $request->boolean('remember_me', true),
         );
 
         return response()->json([
