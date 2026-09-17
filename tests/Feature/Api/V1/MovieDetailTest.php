@@ -26,6 +26,7 @@ class MovieDetailTest extends TestCase
             'data' => [
                 'id', 'slug', 'name', 'originName', 'thumbUrl', 'posterUrl', 'content',
                 'year', 'quality', 'type', 'status', 'episodeCurrent', 'episodeTotal',
+                'notifySchedule', 'scheduleDays',
                 'ratingAvg', 'ratingCount', 'viewCount', 'isCinema', 'isNew', 'isHot',
                 'trailerUrl', 'durationMinutes', 'genres', 'countries',
                 'episodes' => ['*' => ['id', 'name', 'slug', 'servers' => ['*' => ['id', 'serverName', 'langType', 'linkM3u8']]]],

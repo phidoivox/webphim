@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   cacheComponents: true,
   reactStrictMode: true,
   images: {
@@ -70,7 +71,9 @@ const nextConfig: NextConfig = {
         hostname: "api.dicebear.com",
       },
     ],
+
   },
+  allowedDevOrigins: ['192.168.3.37'],
 };
 
 export default nextConfig;

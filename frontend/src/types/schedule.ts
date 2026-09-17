@@ -11,7 +11,7 @@ export interface ScheduleMovieItem {
   episodeCurrent: string | null;
   episodeTotal: string | null;
   notifySchedule: string | null;
-  scheduleDayOfWeek: number;
+  scheduleDays: number[];
   ratingAvg: number;
   year: number | null;
   genres: string[];
@@ -22,6 +22,14 @@ export type WeeklyScheduleData = {
 };
 
 export interface WeeklyScheduleResponse {
-  success: boolean;
+  status?: "success" | "error";
+  success?: boolean;
   data: WeeklyScheduleData;
+}
+
+/** GET /v1/schedule?day=0-6 trả mảng phẳng 1 ngày */
+export interface DayScheduleResponse {
+  status?: "success" | "error";
+  success?: boolean;
+  data: ScheduleMovieItem[];
 }

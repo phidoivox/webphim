@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCountries, getFilteredMovies, getGenres } from "@/lib/api";
+import { getFilteredMovies } from "@/lib/api";
 import MovieCategoryView from "@/components/movie/MovieCategoryView";
 
 interface PageProps {
@@ -9,7 +9,7 @@ interface PageProps {
   searchParams: Promise<{ [key: string]: string | undefined }>;
 }
 
-const TYPE_MAP: Record<string, { apiType: string; title: string; desc: string }> = {
+const TYPE_MAP: Record<string, { apiType?: string; genreSlug?: string; title: string; desc: string }> = {
   "phim-le": {
     apiType: "single",
     title: "Phim Lẻ",
@@ -26,7 +26,7 @@ const TYPE_MAP: Record<string, { apiType: string; title: string; desc: string }>
     desc: "Các chương trình truyền hình thực tế, gameshow và TV show đặc sắc nhất.",
   },
   "hoat-hinh": {
-    apiType: "anime",
+    genreSlug: "hoat-hinh",
     title: "Hoạt Hình",
     desc: "Tuyển tập phim hoạt hình, anime đặc sắc chất lượng cao.",
   },
@@ -55,34 +55,29 @@ async function CategoryContent({ params, searchParams }: PageProps) {
     notFound();
   }
 
-  const [genres, countries, moviesData] = await Promise.all([
-    getGenres().catch(() => []),
-    getCountries().catch(() => []),
-    getFilteredMovies({
-      type: config.apiType,
-      genre: sParams.genre,
-      country: sParams.country,
-      year: sParams.year,
-      sort: sParams.sort || "latest",
-      page: sParams.page || "1",
-      per_page: "32",
-    }).catch(() => ({
-      data: [],
-      meta: {
-        currentPage: 1,
-        lastPage: 1,
-        perPage: 32,
-        total: 0,
-        hasMore: false,
-      },
-    })),
-  ]);
+  const moviesData = await getFilteredMovies({
+    type: config.apiType,
+    genre: config.genreSlug || sParams.genre,
+    country: sParams.country,
+    year: sParams.year,
+    sort: sParams.sort || "latest",
+    page: sParams.page || "1",
+    per_page: "32",
+  }).catch(() => ({
+    data: [],
+    meta: {
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 32,
+      total: 0,
+      hasMore: false,
+    },
+  }));
 
   return (
     <MovieCategoryView
       title={config.title}
-      genres={genres}
-      countries={countries}
+      subtitle={config.desc}
       movies={moviesData.data}
       pagination={moviesData.meta}
       currentParams={{
@@ -92,7 +87,6 @@ async function CategoryContent({ params, searchParams }: PageProps) {
         year: sParams.year,
         sort: sParams.sort,
       }}
-      showTypeFilter={false}
     />
   );
 }

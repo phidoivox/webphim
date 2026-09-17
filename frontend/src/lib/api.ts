@@ -1,10 +1,5 @@
 import type {
-  CarouselSection,
-  CountryItem,
   FilterParams,
-  GenreItem,
-  HeroMovie,
-  MovieDetail,
   MovieSummary,
   PaginatedResponse,
   SearchSuggestionResult,
@@ -43,13 +38,41 @@ import type {
   UnreadCountResponse,
 } from "@/types/notification";
 import type {
-  WeeklyScheduleResponse,
+  DayScheduleResponse,
 } from "@/types/schedule";
-
-export interface HomeData {
-  heroMovies: HeroMovie[];
-  sections: CarouselSection[];
-}
+import type {
+  AdminBulkActionType,
+  AdminDashboardData,
+  AdminEpisodeItem,
+  AdminEpisodePayload,
+  AdminEpisodeServer,
+  AdminEpisodeServerPayload,
+  AdminMovieDetail,
+  AdminMovieListItem,
+  AdminMovieMetaCounts,
+  AdminMoviePayload,
+  AdminPaginationMeta,
+  AdminReportItem,
+  AdminReportPayload,
+  AdminTaxonomyCountry,
+  AdminTaxonomyGenre,
+  AdminTaxonomyPayload,
+  AdminTaxonomyPerson,
+  AdminUserItem,
+  AdminUserPayload,
+} from "@/types/admin";
+import type {
+  CreateReportPayload,
+  CreateReportResponse,
+} from "@/types/report";
+import type {
+  CollectionDetail,
+  CollectionPayload,
+  CollectionSummary,
+  PublicProfileData,
+  UserProfileData,
+} from "@/types/collection";
+import { getApiUrl, getServerApiUrl } from "@/lib/env";
 
 /** Fail hết các base URL — không kết nối được backend. */
 export class ApiError extends Error {
@@ -66,26 +89,15 @@ export class ApiError extends Error {
 /** Backend trả 404 — slug không tồn tại. */
 export class NotFoundError extends Error {}
 
-const POSSIBLE_API_URLS = [
-  process.env.NEXT_PUBLIC_API_URL || "http://webphim.test/api",
-  "http://localhost/webphim/public/api",
-  "http://127.0.0.1:8000/api",
-  "http://localhost:8000/api",
-];
-
-// Lưu lại base URL hoạt động thành công để tối ưu tốc độ cho các request sau
-let cachedWorkingBaseUrl: string | null = null;
-
-// Client-side in-memory cache với timestamp
-const clientMemoryCache = new Map<string, { timestamp: number; data: unknown }>();
-const CLIENT_CACHE_TTL_MS = 60 * 1000; // 1 phút client cache
+const isServer = typeof window === "undefined";
+const API_BASE_URL = isServer ? getServerApiUrl() : getApiUrl();
 
 export interface ApiResult<T> {
   baseUrl: string;
   data: T;
 }
 
-/** Gửi request HTTP (GET, POST, v.v.) qua các base URL khả dụng */
+/** Gửi request HTTP (GET, POST, v.v.) chuẩn tới backend Laravel */
 export async function sendRequest<T>(
   path: string,
   options: {
@@ -95,9 +107,13 @@ export async function sendRequest<T>(
     headers?: Record<string, string>;
     revalidate?: number | false;
     tags?: string[];
+    signal?: AbortSignal;
   } = {}
 ): Promise<T> {
   const method = options.method || "GET";
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const fullUrl = `${API_BASE_URL}${normalizedPath}`;
+
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -105,18 +121,16 @@ export async function sendRequest<T>(
     ...options.headers,
   };
 
-  const body = options.body ? JSON.stringify(options.body) : undefined;
-  let lastError: unknown = null;
-  let validationErrors: Record<string, string[]> | undefined = undefined;
-  let customErrorMessage: string | null = null;
-  let responseStatus = 0;
-
   const fetchOptions: RequestInit & { next?: { revalidate?: number | false; tags?: string[] } } = {
     method,
     headers,
-    body,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   };
 
+  // ponytail: fetch `next` opts giữ Data Cache layer cũ (vẫn support chung
+  // cacheComponents). Upgrade path: wrap public GET bằng 'use cache' +
+  // cacheLife()/cacheTag(), tách riêng request có token.
   if (method === "GET") {
     const nextConfig: { revalidate?: number | false; tags?: string[] } = {};
     if (options.revalidate !== undefined) {
@@ -130,84 +144,51 @@ export async function sendRequest<T>(
     }
   }
 
-  const urlsToTry = cachedWorkingBaseUrl
-    ? [cachedWorkingBaseUrl, ...POSSIBLE_API_URLS.filter((u) => u !== cachedWorkingBaseUrl)]
-    : POSSIBLE_API_URLS;
-
-  for (const base of urlsToTry) {
-    try {
-      const res = await fetch(`${base}${path}`, fetchOptions);
-
-      responseStatus = res.status;
-
-      if (res.ok) {
-        cachedWorkingBaseUrl = base;
-        return (await res.json()) as T;
-      }
-
-      // Xử lý các mã lỗi HTTP có payload JSON
-      try {
-        const errorData = (await res.json()) as { message?: string; errors?: Record<string, string[]> };
-        customErrorMessage = errorData.message || null;
-        validationErrors = errorData.errors;
-      } catch {
-        customErrorMessage = null;
-      }
-
-      if (res.status === 404) {
-        throw new NotFoundError(customErrorMessage || "Không tìm thấy dữ liệu yêu cầu.");
-      }
-
-      if (res.status === 422 || res.status === 401 || res.status === 403 || res.status === 429) {
-        // Lỗi client / validation / unauthorized từ backend: ném ra ngay lập tức
-        throw new ApiError(customErrorMessage || `Yêu cầu không hợp lệ (HTTP ${res.status})`, {
-          status: res.status,
-          errors: validationErrors,
-        });
-      }
-
-      if (res.status >= 500) {
-        if (customErrorMessage) {
-          throw new ApiError(customErrorMessage, { status: res.status });
-        }
-        lastError = new Error(`Lỗi máy chủ nội bộ (HTTP ${res.status})`);
-      }
-    } catch (err) {
-      if (err instanceof ApiError || err instanceof NotFoundError) {
-        throw err;
-      }
-      lastError = err;
-    }
+  let res: Response;
+  try {
+    res = await fetch(fullUrl, fetchOptions);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError(`Không thể kết nối đến Backend (${fullUrl}).`, {
+      cause: err,
+      status: 0,
+    });
   }
 
-  throw new ApiError(
-    customErrorMessage ||
-      "Không thể kết nối đến Backend Laravel qua các địa chỉ (webphim.test, localhost/webphim/public, 127.0.0.1:8000). Vui lòng kiểm tra backend server.",
-    { cause: lastError, status: responseStatus, errors: validationErrors }
-  );
+  if (res.ok) {
+    return (await res.json()) as T;
+  }
+
+  // Xử lý payload lỗi từ Backend
+  let customErrorMessage: string | null = null;
+  let validationErrors: Record<string, string[]> | undefined = undefined;
+
+  try {
+    const errorData = (await res.json()) as { message?: string; errors?: Record<string, string[]> };
+    customErrorMessage = errorData.message || null;
+    validationErrors = errorData.errors;
+  } catch {
+    customErrorMessage = null;
+  }
+
+  if (res.status === 404) {
+    throw new NotFoundError(customErrorMessage || "Không tìm thấy dữ liệu yêu cầu.");
+  }
+
+  throw new ApiError(customErrorMessage || `Yêu cầu không thành công (HTTP ${res.status})`, {
+    status: res.status,
+    errors: validationErrors,
+  });
 }
 
-/** Thử base URL đã biết hoặc lần lượt các base URL, trả kết quả của base 200 đầu tiên (có client caching). */
+/** Fetch dữ liệu JSON đơn giản từ Backend */
 export async function fetchJson<T>(
   path: string,
-  bypassCache = false,
+  _bypassCache = false,
   fetchOptions: { tags?: string[]; revalidate?: number | false } = {}
 ): Promise<ApiResult<T>> {
-  const cacheKey = path;
-  const isClient = typeof window !== "undefined";
-
-  if (isClient && !bypassCache && clientMemoryCache.has(cacheKey)) {
-    const cached = clientMemoryCache.get(cacheKey)!;
-    if (Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
-      return { baseUrl: cachedWorkingBaseUrl || POSSIBLE_API_URLS[0], data: cached.data as T };
-    }
-  }
-
   const data = await sendRequest<T>(path, { method: "GET", ...fetchOptions });
-  if (isClient) {
-    clientMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
-  }
-  return { baseUrl: cachedWorkingBaseUrl || POSSIBLE_API_URLS[0], data };
+  return { baseUrl: API_BASE_URL, data };
 }
 
 
@@ -249,34 +230,7 @@ export async function logoutApi(token: string): Promise<void> {
 }
 
 // =================== MOVIE & CONTENT APIS ===================
-
-export async function getHomeData(bypassCache = false): Promise<HomeData> {
-  const { data: payload } = await fetchJson<{ data: HomeData }>("/v1/home", bypassCache, {
-    tags: ["home", "movies"],
-  });
-  return payload.data;
-}
-
-export async function getMovieDetail(slug: string, bypassCache = false): Promise<MovieDetail> {
-  const { data: payload } = await fetchJson<{ data: MovieDetail }>(`/v1/movies/${slug}`, bypassCache, {
-    tags: ["movies", `movie-${slug}`],
-  });
-  return payload.data;
-}
-
-export async function getGenres(bypassCache = false): Promise<GenreItem[]> {
-  const { data: payload } = await fetchJson<{ data: GenreItem[] }>("/v1/genres", bypassCache, {
-    tags: ["genres", "taxonomy"],
-  });
-  return payload.data;
-}
-
-export async function getCountries(bypassCache = false): Promise<CountryItem[]> {
-  const { data: payload } = await fetchJson<{ data: CountryItem[] }>("/v1/countries", bypassCache, {
-    tags: ["countries", "taxonomy"],
-  });
-  return payload.data;
-}
+// Public cached GET đã tách sang @/lib/cached-content ('use cache' layer).
 
 export async function getFilteredMovies(
   params: FilterParams = {},
@@ -295,20 +249,24 @@ export async function getFilteredMovies(
 
   const qs = query.toString();
   const path = `/v1/movies${qs ? `?${qs}` : ""}`;
-  const { data: payload } = await fetchJson<PaginatedResponse<MovieSummary>>(path, bypassCache);
+  const { data: payload } = await fetchJson<PaginatedResponse<MovieSummary>>(path, bypassCache, {
+    tags: ["movies"],
+    revalidate: 60,
+  });
   return payload;
 }
 
 export async function searchLiveSuggestions(
   keyword: string,
   limit = 5,
-  bypassCache = false
+  bypassCache = false,
+  signal?: AbortSignal
 ): Promise<SearchSuggestionResult> {
   const trimmed = keyword.trim();
   if (!trimmed) return { movies: [], actors: [] };
   const path = `/v1/movies/search?q=${encodeURIComponent(trimmed)}&limit=${limit}`;
-  const { data: payload } = await fetchJson<{ data: SearchSuggestionResult }>(path, bypassCache);
-  return payload.data;
+  const data = await sendRequest<{ data: SearchSuggestionResult }>(path, { method: "GET", signal });
+  return data.data;
 }
 
 export async function searchMovies(
@@ -318,15 +276,6 @@ export async function searchMovies(
 ): Promise<MovieSummary[]> {
   const res = await searchLiveSuggestions(keyword, limit, bypassCache);
   return res.movies;
-}
-
-/** Xóa client cache theo path hoặc toàn bộ */
-export function clearClientCache(path?: string): void {
-  if (path) {
-    clientMemoryCache.delete(path);
-  } else {
-    clientMemoryCache.clear();
-  }
 }
 
 /** Đồng bộ tiến trình xem phim lên máy chủ (Cloud Sync) */
@@ -506,6 +455,101 @@ export async function clearAllBookmarksApi(
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   HỒ SƠ & BỘ SƯU TẬP CÁ NHÂN (sanctum) + PUBLIC
+───────────────────────────────────────────────────────────── */
+
+/** Thông tin profile + thống kê của user đăng nhập */
+export async function getUserProfileApi(token?: string | null): Promise<UserProfileData> {
+  const res = await sendRequest<{ status: string; data: UserProfileData }>("/v1/user/profile", {
+    method: "GET",
+    token,
+  });
+  return res.data;
+}
+
+/** Cập nhật tên / avatar / mật khẩu */
+export async function updateUserProfileApi(
+  payload: { name?: string; avatar_url?: string | null; current_password?: string; password?: string; password_confirmation?: string },
+  token?: string | null
+): Promise<{ status: string; message: string; data: import("@/types/auth").AuthUser }> {
+  return sendRequest("/v1/user/profile", { method: "PUT", body: payload, token });
+}
+
+/** Danh sách bộ sưu tập của user đăng nhập */
+export async function getUserCollectionsApi(token?: string | null): Promise<CollectionSummary[]> {
+  const res = await sendRequest<{ status: string; data: CollectionSummary[] }>("/v1/user/collections", {
+    method: "GET",
+    token,
+  });
+  return res.data;
+}
+
+/** Tạo bộ sưu tập mới */
+export async function createCollectionApi(payload: CollectionPayload, token?: string | null): Promise<CollectionDetail> {
+  const res = await sendRequest<{ status: string; data: CollectionDetail }>("/v1/user/collections", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+  return res.data;
+}
+
+/** Chi tiết bộ sưu tập của user */
+export async function getUserCollectionDetailApi(id: number, token?: string | null): Promise<CollectionDetail> {
+  const res = await sendRequest<{ status: string; data: CollectionDetail }>(`/v1/user/collections/${id}`, {
+    method: "GET",
+    token,
+  });
+  return res.data;
+}
+
+/** Cập nhật bộ sưu tập */
+export async function updateCollectionApi(id: number, payload: CollectionPayload, token?: string | null): Promise<CollectionDetail> {
+  const res = await sendRequest<{ status: string; data: CollectionDetail }>(`/v1/user/collections/${id}`, {
+    method: "PUT",
+    body: payload,
+    token,
+  });
+  return res.data;
+}
+
+/** Xóa bộ sưu tập */
+export async function deleteCollectionApi(id: number, token?: string | null): Promise<{ status: string; message: string }> {
+  return sendRequest(`/v1/user/collections/${id}`, { method: "DELETE", token });
+}
+
+/** Thêm phim vào bộ sưu tập */
+export async function addMovieToCollectionApi(id: number, movieId: number, token?: string | null): Promise<CollectionDetail> {
+  const res = await sendRequest<{ status: string; data: CollectionDetail }>(`/v1/user/collections/${id}/movies`, {
+    method: "POST",
+    body: { movie_id: movieId },
+    token,
+  });
+  return res.data;
+}
+
+/** Gỡ phim khỏi bộ sưu tập */
+export async function removeMovieFromCollectionApi(id: number, movieId: number, token?: string | null): Promise<{ status: string; message: string }> {
+  return sendRequest(`/v1/user/collections/${id}/movies/${movieId}`, { method: "DELETE", token });
+}
+
+/** Hồ sơ công khai user + BST công khai */
+export async function getPublicProfileApi(id: number): Promise<PublicProfileData> {
+  const res = await sendRequest<{ status: string; data: PublicProfileData }>(`/v1/users/${id}`, {
+    method: "GET",
+  });
+  return res.data;
+}
+
+/** Chi tiết BST công khai theo slug */
+export async function getPublicCollectionApi(slug: string): Promise<CollectionDetail> {
+  const res = await sendRequest<{ status: string; data: CollectionDetail }>(`/v1/collections/${slug}`, {
+    method: "GET",
+  });
+  return res.data;
+}
+
 /** Gộp tủ phim từ thiết bị khách vào tài khoản */
 export async function mergeGuestBookmarksApi(
   items: Array<{ movie_id: number; type?: BookmarkType }>,
@@ -524,27 +568,6 @@ export async function mergeGuestBookmarksApi(
 /* ─────────────────────────────────────────────────────────────
    ADMIN MANAGEMENT API METHODS
 ───────────────────────────────────────────────────────────── */
-
-import type {
-  AdminBulkActionType,
-  AdminDashboardData,
-  AdminEpisodeItem,
-  AdminEpisodePayload,
-  AdminEpisodeServerPayload,
-  AdminMovieDetail,
-  AdminMovieListItem,
-  AdminMovieMetaCounts,
-  AdminMoviePayload,
-  AdminPaginationMeta,
-  AdminReportItem,
-  AdminReportPayload,
-  AdminTaxonomyCountry,
-  AdminTaxonomyGenre,
-  AdminTaxonomyPayload,
-  AdminUserItem,
-  AdminUserPayload,
-  ViewsTimeseriesPoint,
-} from "@/types/admin";
 
 export async function getAdminDashboardStatsApi(token?: string | null): Promise<AdminDashboardData> {
   const res = await sendRequest<{ status: string; data: AdminDashboardData }>("/v1/admin/dashboard/stats", {
@@ -647,6 +670,21 @@ export async function deleteAdminEpisodeApi(id: number | string, token?: string 
   });
 }
 
+export async function syncAdminEpisodesApi(
+  movieId: number | string,
+  payload: { episodes: any[]; clear_existing?: boolean },
+  token?: string | null
+): Promise<{ status: string; message: string; data: { count: number; servers_count: number; episodes: AdminEpisodeItem[] } }> {
+  return sendRequest<{ status: string; message: string; data: { count: number; servers_count: number; episodes: AdminEpisodeItem[] } }>(
+    `/v1/admin/movies/${movieId}/episodes/sync`,
+    {
+      method: "POST",
+      body: payload,
+      token,
+    }
+  );
+}
+
 export async function getAdminTaxonomyGenresApi(token?: string | null): Promise<AdminTaxonomyGenre[]> {
   const res = await sendRequest<{ status: string; data: AdminTaxonomyGenre[] }>("/v1/admin/genres", { token });
   return res.data;
@@ -679,6 +717,69 @@ export async function updateAdminTaxonomyCountryApi(id: number, payload: AdminTa
 
 export async function deleteAdminTaxonomyCountryApi(id: number, token?: string | null): Promise<{ status: string; message: string }> {
   return sendRequest(`/v1/admin/countries/${id}`, { method: "DELETE", token });
+}
+
+export async function createAdminEpisodeServerApi(
+  episodeId: number | string,
+  payload: { server_name: string; lang_type: string; link_m3u8?: string; link_embed?: string; sort_order?: number; is_active?: boolean },
+  token?: string | null
+): Promise<{ status: string; message: string; data: AdminEpisodeServer }> {
+  return sendRequest(`/v1/admin/episodes/${episodeId}/servers`, {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export async function deleteAdminEpisodeServerApi(serverId: number | string, token?: string | null): Promise<{ status: string; message: string }> {
+  return sendRequest(`/v1/admin/servers/${serverId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function getAdminPeopleApi(
+  params: { q?: string } = {},
+  token?: string | null
+): Promise<AdminTaxonomyPerson[]> {
+  const query = new URLSearchParams();
+  if (params.q) query.set("q", params.q);
+  const qs = query.toString() ? `?${query.toString()}` : "";
+  const res = await sendRequest<{ status: string; data: AdminTaxonomyPerson[] }>(`/v1/admin/people${qs}`, { token });
+  return res.data;
+}
+
+export async function createAdminPersonApi(
+  payload: { name: string; slug?: string; other_names?: string; avatar_url?: string; biography?: string; gender?: string; birthday?: string; place_of_birth?: string; tmdb_id?: string },
+  token?: string | null
+): Promise<{ status: string; message: string; data: AdminTaxonomyPerson }> {
+  return sendRequest("/v1/admin/people", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+export async function updateAdminPersonApi(
+  id: number | string,
+  payload: { name: string; slug?: string; other_names?: string; avatar_url?: string; biography?: string; gender?: string; birthday?: string; place_of_birth?: string; tmdb_id?: string },
+  token?: string | null
+): Promise<{ status: string; message: string; data: AdminTaxonomyPerson }> {
+  return sendRequest(`/v1/admin/people/${id}`, {
+    method: "PUT",
+    body: payload,
+    token,
+  });
+}
+
+export async function deleteAdminPersonApi(
+  id: number | string,
+  token?: string | null
+): Promise<{ status: string; message: string }> {
+  return sendRequest(`/v1/admin/people/${id}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function getAdminUsersApi(
@@ -921,8 +1022,8 @@ export async function getUnreadNotificationsCountApi(
 export async function markNotificationAsReadApi(
   notificationId: string,
   token?: string | null
-): Promise<{ success: boolean; data: { unreadCount: number } }> {
-  return sendRequest<{ success: boolean; data: { unreadCount: number } }>(
+): Promise<{ status?: string; success?: boolean; data: { unreadCount: number } }> {
+  return sendRequest<{ status?: string; success?: boolean; data: { unreadCount: number } }>(
     `/v1/notifications/${notificationId}/read`,
     {
       method: "PATCH",
@@ -934,8 +1035,8 @@ export async function markNotificationAsReadApi(
 /** Đánh dấu tất cả thông báo là đã đọc */
 export async function markAllNotificationsAsReadApi(
   token?: string | null
-): Promise<{ success: boolean; data: { unreadCount: number } }> {
-  return sendRequest<{ success: boolean; data: { unreadCount: number } }>(
+): Promise<{ status?: string; success?: boolean; data: { unreadCount: number } }> {
+  return sendRequest<{ status?: string; success?: boolean; data: { unreadCount: number } }>(
     "/v1/notifications/read-all",
     {
       method: "POST",
@@ -948,8 +1049,8 @@ export async function markAllNotificationsAsReadApi(
 export async function deleteNotificationApi(
   notificationId: string,
   token?: string | null
-): Promise<{ success: boolean; message: string }> {
-  return sendRequest<{ success: boolean; message: string }>(
+): Promise<{ status?: string; success?: boolean; message: string }> {
+  return sendRequest<{ status?: string; success?: boolean; message: string }>(
     `/v1/notifications/${notificationId}`,
     {
       method: "DELETE",
@@ -973,9 +1074,27 @@ export async function broadcastAdminNotificationApi(
   );
 }
 
-/** Lấy lịch chiếu phim tuần (0 = Chủ nhật, ..., 6 = Thứ 7) */
-export async function getWeeklyScheduleApi(): Promise<WeeklyScheduleResponse> {
-  return sendRequest<WeeklyScheduleResponse>("/v1/schedule", {
+/* ==========================================================================
+   EPISODE REPORT API
+   ========================================================================== */
+
+/** Gửi báo cáo lỗi tập phim/máy chủ phát */
+export async function sendEpisodeReportApi(
+  payload: CreateReportPayload,
+  token?: string | null
+): Promise<CreateReportResponse> {
+  return sendRequest<CreateReportResponse>("/v1/reports", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
+
+/** Lấy lịch chiếu 1 ngày (?day=0-6) */
+export async function getDayScheduleApi(day: number): Promise<DayScheduleResponse> {
+  return sendRequest<DayScheduleResponse>(`/v1/schedule?day=${day}`, {
+    tags: ["schedule", "movies"],
     revalidate: 1800,
   });
 }

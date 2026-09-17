@@ -46,6 +46,8 @@ class MovieDetailResource extends JsonResource
             'status' => $movie->status instanceof \BackedEnum ? $movie->status->value : $movie->status,
             'episodeCurrent' => $movie->episode_current,
             'episodeTotal' => $movie->episode_total,
+            'notifySchedule' => $movie->notify_schedule,
+            'scheduleDays' => $movie->schedule_days ?? [],
             'ratingAvg' => (float) ($movie->rating_avg ?? 0),
             'imdbRating' => $movie->imdb_rating > 0 ? (float) $movie->imdb_rating : null,
             'ratingCount' => (int) ($movie->rating_count ?? 0),
@@ -82,6 +84,7 @@ class MovieDetailResource extends JsonResource
                                     'serverName' => $s->server_name,
                                     'langType' => $s->lang_type instanceof \BackedEnum ? $s->lang_type->value : $s->lang_type,
                                     'linkM3u8' => $s->link_m3u8,
+                                    'linkEmbed' => $s->link_embed,
                                 ])
                                 ->values()
                                 ->all()

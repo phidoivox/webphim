@@ -12,7 +12,6 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class AdminDashboardController extends Controller
 {
@@ -31,7 +30,7 @@ class AdminDashboardController extends Controller
         $startDate = Carbon::today()->subDays($daysCount - 1);
         $dailyViews = [];
 
-        if (Schema::hasTable('movie_view_logs')) {
+        try {
             $dbViews = DB::table('movie_view_logs')
                 ->selectRaw('DATE(viewed_at) as log_date, COUNT(*) as aggregate')
                 ->where('viewed_at', '>=', $startDate->copy()->startOfDay())
@@ -41,36 +40,32 @@ class AdminDashboardController extends Controller
             if (! empty($dbViews)) {
                 $dailyViews = $dbViews;
             }
+        } catch (\Throwable) {
+            // movie_view_logs fallback
         }
 
-        if (empty($dailyViews) && Schema::hasTable('watch_histories')) {
-            $dbViews = DB::table('watch_histories')
-                ->selectRaw('DATE(watched_at) as log_date, COUNT(*) as aggregate')
-                ->where('watched_at', '>=', $startDate->copy()->startOfDay())
-                ->groupBy('log_date')
-                ->pluck('aggregate', 'log_date')
-                ->all();
-            if (! empty($dbViews)) {
-                $dailyViews = $dbViews;
+        if (empty($dailyViews)) {
+            try {
+                $dbViews = DB::table('watch_histories')
+                    ->selectRaw('DATE(watched_at) as log_date, COUNT(*) as aggregate')
+                    ->where('watched_at', '>=', $startDate->copy()->startOfDay())
+                    ->groupBy('log_date')
+                    ->pluck('aggregate', 'log_date')
+                    ->all();
+                if (! empty($dbViews)) {
+                    $dailyViews = $dbViews;
+                }
+            } catch (\Throwable) {
+                // watch_histories fallback
             }
         }
 
         $viewsTimeseries = [];
-        $weights = [0.05, 0.06, 0.05, 0.07, 0.08, 0.09, 0.10, 0.06, 0.07, 0.06, 0.08, 0.09, 0.10, 0.04];
-        $totalWeight = array_sum($weights);
-        $baselineViews = $totalViews > 0 ? max((int) round($totalViews * 0.12), 140) : 180;
-
         $currentDate = $startDate->copy();
         for ($i = 0; $i < $daysCount; $i++) {
             $dateStr = $currentDate->format('Y-m-d');
             $labelStr = $currentDate->format('d/m');
-
-            if (! empty($dailyViews)) {
-                $dayCount = (int) ($dailyViews[$dateStr] ?? 0);
-            } else {
-                $w = $weights[$i] ?? (1 / $daysCount);
-                $dayCount = (int) round(($w / $totalWeight) * $baselineViews);
-            }
+            $dayCount = (int) ($dailyViews[$dateStr] ?? 0);
 
             $viewsTimeseries[] = [
                 'date' => $dateStr,
@@ -83,7 +78,7 @@ class AdminDashboardController extends Controller
 
         // Recent activity logs
         $activityLogs = [];
-        if (Schema::hasTable('audit_logs')) {
+        try {
             $auditLogs = AuditLog::query()
                 ->with('user:id,name,email')
                 ->orderByDesc('created_at')
@@ -109,6 +104,8 @@ class AdminDashboardController extends Controller
                     'time' => $log->created_at?->diffForHumans() ?? $log->created_at?->toISOString() ?? 'Gần đây',
                 ];
             }
+        } catch (\Throwable) {
+            // audit_logs fallback
         }
 
         if (empty($activityLogs)) {
@@ -145,9 +142,9 @@ class AdminDashboardController extends Controller
                 'slug' => $m->slug,
                 'thumbUrl' => $m->thumb_url,
                 'posterUrl' => $m->poster_url,
-                'type' => $m->type instanceof \BackedEnum ? $m->type->value : $m->type,
-                'status' => $m->status instanceof \BackedEnum ? $m->status->value : $m->status,
-                'quality' => $m->quality instanceof \BackedEnum ? $m->quality->value : $m->quality,
+                'type' => $m->type,
+                'status' => $m->status,
+                'quality' => $m->quality,
                 'year' => $m->year,
                 'viewCount' => $m->view_count,
                 'isActive' => (bool) $m->is_active,
@@ -175,11 +172,19 @@ class AdminDashboardController extends Controller
                 'createdAt' => $r->created_at?->toISOString(),
             ]);
 
-        // Top 5 most viewed movies
+        // Top 5 most viewed movies (chuẩn camelCase)
         $topViewedMovies = Movie::query()
             ->orderByDesc('view_count')
             ->limit(5)
-            ->get(['id', 'name', 'slug', 'thumb_url', 'view_count', 'rating_avg']);
+            ->get(['id', 'name', 'slug', 'thumb_url', 'view_count', 'rating_avg'])
+            ->map(fn (Movie $m) => [
+                'id' => $m->id,
+                'name' => $m->name,
+                'slug' => $m->slug,
+                'thumbUrl' => $m->thumb_url,
+                'viewCount' => $m->view_count,
+                'ratingAvg' => $m->rating_avg,
+            ]);
 
         return response()->json([
             'status' => 'success',

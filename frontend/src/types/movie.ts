@@ -1,4 +1,8 @@
 /** Shape dữ liệu phim — khớp với API Laravel `/api/v1/movies`. */
+export interface HomeData {
+  heroMovies: HeroMovie[];
+  sections: CarouselSection[];
+}
 export interface MovieSummary {
   id: number;
   slug: string;
@@ -146,6 +150,8 @@ export interface MovieDetail {
   status: string;
   episodeCurrent: string | null;
   episodeTotal: string | null;
+  notifySchedule?: string | null;
+  scheduleDays?: number[];
   ratingAvg: number;
   imdbRating?: number | string | null;
   ratingCount: number;

@@ -52,7 +52,7 @@ class WatchHistoryResource extends JsonResource
                     'id' => $this->episode->id,
                     'name' => $this->episode->name,
                     'slug' => $this->episode->slug,
-                    'serverName' => $this->server?->server_name ?? $this->server?->name,
+                    'serverName' => $this->server?->server_name,
                 ];
             }),
         ];

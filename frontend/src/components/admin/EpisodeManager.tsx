@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { useAuth } from "@/context/AuthContext";
 import {
   createAdminEpisodeApi,
   deleteAdminEpisodeApi,
   getAdminEpisodesApi,
+  syncAdminEpisodesApi,
   updateAdminEpisodeApi,
 } from "@/lib/api";
+import { parseEpisodesFromPhimApi } from "@/lib/phimapi";
 import { slugifyVietnamese } from "@/lib/slug";
 import type { AdminEpisodeItem, AdminEpisodeServer } from "@/types/admin";
 import {
@@ -29,6 +31,7 @@ import {
   RefreshCwIcon,
   SearchIcon,
   ServerIcon,
+  SparklesIcon,
   TrashIcon,
   VideoIcon,
   Volume2Icon,
@@ -461,21 +464,46 @@ export default function EpisodeManager({ movieId }: EpisodeManagerProps) {
     serverName: string;
   } | null>(null);
 
-  const loadEpisodes = async () => {
+  // PhimAPI Bulk Sync Modal State
+  const [movieInfo, setMovieInfo] = useState<{ id: number; name: string; slug: string } | null>(null);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncSlug, setSyncSlug] = useState("");
+  const [clearExisting, setClearExisting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadEpisodes = useCallback(async () => {
     try {
       setLoading(true);
       const res = await getAdminEpisodesApi(movieId, token);
-      setEpisodes(res.episodes);
+      if (isMountedRef.current) {
+        setEpisodes(res.episodes);
+        if (res.movie) {
+          setMovieInfo(res.movie);
+        }
+      }
     } catch (err: any) {
-      console.error("Lỗi tải tập phim", err);
+      if (isMountedRef.current) {
+        console.error("Lỗi tải tập phim", err);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [movieId, token]);
 
   useEffect(() => {
-    loadEpisodes();
-  }, [movieId, token]);
+    void loadEpisodes();
+  }, [loadEpisodes]);
 
   const filteredEpisodes = useMemo(() => {
     if (!searchQuery.trim()) return episodes;
@@ -489,6 +517,62 @@ export default function EpisodeManager({ movieId }: EpisodeManagerProps) {
   const handleEpNameChange = (name: string) => {
     setEpName(name);
     setEpSlug(slugifyVietnamese(name));
+  };
+
+  const openSyncModal = () => {
+    setSyncSlug(movieInfo?.slug || "");
+    setClearExisting(false);
+    setShowSyncModal(true);
+  };
+
+  const handleSyncPhimApi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanSlug = syncSlug
+      .trim()
+      .replace(/^https?:\/\/.*\/phim\//, "")
+      .replace(/[\?#].*$/, "")
+      .replace(/\/+$/, "")
+      .trim();
+
+    if (!cleanSlug) {
+      toast.error("Vui lòng nhập slug phim hoặc đường dẫn từ PhimAPI.");
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      const res = await fetch(`https://phimapi.com/v1/api/phim/${encodeURIComponent(cleanSlug)}`);
+      if (!res.ok) {
+        throw new Error(`Không tìm thấy phim với slug "${cleanSlug}" trên PhimAPI (HTTP ${res.status}).`);
+      }
+      const json = await res.json();
+      if (json.status !== "success" || !json.data?.item) {
+        throw new Error(json.message || "Không tìm thấy dữ liệu bộ phim trên PhimAPI.");
+      }
+
+      const parsedEpisodes = parseEpisodesFromPhimApi(json.data.item.episodes);
+      if (parsedEpisodes.length === 0) {
+        toast.warning("Phim này chưa có danh sách tập hoặc máy chủ phát nào trên PhimAPI.");
+        return;
+      }
+
+      const syncResult = await syncAdminEpisodesApi(
+        movieId,
+        {
+          episodes: parsedEpisodes,
+          clear_existing: clearExisting,
+        },
+        token
+      );
+
+      toast.success(syncResult.message || `Đã đồng bộ thành công ${syncResult.data.count} tập phim!`);
+      setShowSyncModal(false);
+      await loadEpisodes();
+    } catch (err: any) {
+      toast.error(err?.message || "Có lỗi xảy ra khi đồng bộ tập phim từ PhimAPI.");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const openAddModal = () => {
@@ -669,6 +753,15 @@ export default function EpisodeManager({ movieId }: EpisodeManagerProps) {
 
           <button
             type="button"
+            onClick={openSyncModal}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
+          >
+            <SparklesIcon className="h-3.5 w-3.5" />
+            <span>Lấy từ PhimAPI</span>
+          </button>
+
+          <button
+            type="button"
             onClick={openAddModal}
             className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/90 transition cursor-pointer"
           >
@@ -709,15 +802,25 @@ export default function EpisodeManager({ movieId }: EpisodeManagerProps) {
           <VideoIcon className="h-8 w-8 mx-auto mb-2 text-slate-600" />
           <p className="font-semibold text-slate-300">Chưa có tập phim nào.</p>
           <p className="text-[11px] mt-0.5 text-slate-500">
-            Bấm &quot;Thêm Tập&quot; để thiết lập link phát HLS (.m3u8) cho tập đầu tiên.
+            Bấm &quot;Thêm Tập&quot; để thiết lập link phát hoặc &quot;Lấy tập từ PhimAPI&quot; để nạp tự động toàn bộ.
           </p>
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/90 transition cursor-pointer"
-          >
-            Thêm Tập Mới
-          </button>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/90 transition cursor-pointer"
+            >
+              Thêm Tập Mới
+            </button>
+            <button
+              type="button"
+              onClick={openSyncModal}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
+            >
+              <SparklesIcon className="h-3.5 w-3.5" />
+              <span>Lấy tập từ PhimAPI</span>
+            </button>
+          </div>
         </div>
       ) : viewMode === "grid" ? (
         /* ── GRID CARD VIEW ── */
@@ -1114,6 +1217,91 @@ export default function EpisodeManager({ movieId }: EpisodeManagerProps) {
           serverName={testingStream.serverName}
           onClose={() => setTestingStream(null)}
         />
+      )}
+
+      {/* ── MODAL BULK SYNC FROM PHIMAPI ── */}
+      {showSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0f121b] p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <SparklesIcon className="h-4 w-4 text-amber-400" />
+                <span>Đồng Bộ Tập Phim Từ PhimAPI</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowSyncModal(false)}
+                className="text-white/40 hover:text-white text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSyncPhimApi} className="space-y-4">
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-white">
+                  Slug phim hoặc Link PhimAPI <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={syncSlug}
+                  onChange={(e) => setSyncSlug(e.target.value)}
+                  placeholder="VD: tinh-yeu-lap-lanh-phan-1 hoặc https://phimapi.com/phim/..."
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Hệ thống sẽ lấy danh sách toàn bộ các tập phim và các server phát (Vietsub, Thuyết minh,...) từ PhimAPI để nạp vào cơ sở dữ liệu.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={clearExisting}
+                    onChange={(e) => setClearExisting(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-amber-500 focus:ring-0 focus:ring-offset-0"
+                  />
+                  <div className="text-xs">
+                    <span className="font-semibold text-slate-200">Xóa toàn bộ tập phim cũ trước khi đồng bộ</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Nếu không chọn, hệ thống sẽ tự động cập nhật hoặc thêm mới các tập mà không làm mất bình luận hay lịch sử xem phim của tập cũ.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  disabled={syncing}
+                  onClick={() => setShowSyncModal(false)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/80 hover:bg-white/10 transition cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={syncing}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-5 py-2 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/25 hover:bg-amber-400 disabled:opacity-50 transition cursor-pointer"
+                >
+                  {syncing ? (
+                    <>
+                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                      <span>Đang nạp tập...</span>
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="h-3.5 w-3.5" />
+                      <span>Bắt đầu đồng bộ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

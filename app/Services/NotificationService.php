@@ -2,17 +2,11 @@
 
 namespace App\Services;
 
-use App\Events\NotificationSentEvent;
 use App\Models\Episode;
 use App\Models\User;
-use App\Notifications\NewEpisodeNotification;
-use App\Notifications\SystemBroadcastNotification;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Notifications\DatabaseNotification;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Str;
 
 class NotificationService
 {
@@ -73,82 +67,47 @@ class NotificationService
     }
 
     /**
-     * Gửi thông báo broadcast hệ thống đến tất cả người dùng hoạt động.
+     * Số thông báo chưa đọc cho nhiều user (1 query batch, tránh N+1 COUNT).
+     *
+     * @param  array<int>  $userIds
+     * @return array<int, int>
      */
-    public function broadcastSystemNotification(string $title, string $message, ?string $link = null, bool $sendMail = false): int
+    public function unreadCountsFor(array $userIds): array
     {
-        $notification = new SystemBroadcastNotification($title, $message, $link, $sendMail);
+        if (empty($userIds)) {
+            return [];
+        }
 
-        $sentCount = 0;
-        User::where('is_active', true)->chunkById(100, function (Collection $users) use ($notification, $title, $message, $link, &$sentCount) {
-            Notification::send($users, $notification);
-            $sentCount += $users->count();
-
-            foreach ($users as $user) {
-                try {
-                    $unread = $user->unreadNotifications()->count();
-                    $latest = $user->notifications()->latest()->first();
-                    $formatted = $latest ? self::formatNotification($latest) : [
-                        'id' => (string) Str::uuid(),
-                        'title' => $title,
-                        'message' => $message,
-                        'link' => $link,
-                        'iconType' => 'system',
-                        'isRead' => false,
-                        'readAt' => null,
-                        'createdAt' => now()->toIso8601String(),
-                        'extra' => [],
-                    ];
-                    broadcast(new NotificationSentEvent($user->id, $formatted, $unread));
-                } catch (\Throwable $e) {
-                    Log::error('Broadcast system notification error for user '.$user->id.': '.$e->getMessage());
-                }
-            }
-        });
-
-        return $sentCount;
+        return DatabaseNotification::query()
+            ->where('notifiable_type', (new User)->getMorphClass())
+            ->whereIn('notifiable_id', $userIds)
+            ->whereNull('read_at')
+            ->groupBy('notifiable_id')
+            ->selectRaw('notifiable_id, COUNT(*) as aggregate')
+            ->pluck('aggregate', 'notifiable_id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
     }
 
     /**
-     * Gửi thông báo tập mới cho tất cả người dùng đã bookmark phim.
+     * Gửi thông báo broadcast hệ thống đến tất cả người dùng hoạt động.
+     * Dispatch job queue, trả về ngay để tránh timeout request.
+     */
+    public function broadcastSystemNotification(string $title, string $message, ?string $link = null, bool $sendMail = false): int
+    {
+        \App\Jobs\BroadcastSystemNotification::dispatch($title, $message, $link, $sendMail);
+
+        return (int) User::where('is_active', true)->count();
+    }
+
+    /**
+     * Gửi thông báo tập mới: dispatch job queue, trả về 0 ngay (count thật nằm trong job).
      */
     public function notifyNewEpisode(Episode $episode): int
     {
-        $movie = $episode->movie;
-        if (! $movie) {
-            return 0;
-        }
+        \App\Jobs\NotifyNewEpisode::dispatch($episode->id);
 
-        // Lấy danh sách user_id đã bookmark bộ phim này
-        $userIds = $movie->bookmarks()->pluck('user_id');
-
-        if ($userIds->isEmpty()) {
-            return 0;
-        }
-
-        $notification = new NewEpisodeNotification($movie, $episode);
-        $sentCount = 0;
-
-        User::whereIn('id', $userIds)
-            ->where('is_active', true)
-            ->chunkById(100, function (Collection $users) use ($notification, &$sentCount) {
-                Notification::send($users, $notification);
-                $sentCount += $users->count();
-
-                foreach ($users as $user) {
-                    try {
-                        $unread = $user->unreadNotifications()->count();
-                        $latest = $user->notifications()->latest()->first();
-                        if ($latest) {
-                            broadcast(new NotificationSentEvent($user->id, self::formatNotification($latest), $unread));
-                        }
-                    } catch (\Throwable $e) {
-                        Log::error('Broadcast episode error for user '.$user->id.': '.$e->getMessage());
-                    }
-                }
-            });
-
-        return $sentCount;
+        return 0;
     }
 
     /**

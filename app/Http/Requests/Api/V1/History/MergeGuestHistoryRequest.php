@@ -20,7 +20,7 @@ class MergeGuestHistoryRequest extends FormRequest
             'items.*.server_id' => ['nullable', 'integer'],
             'items.*.progress_seconds' => ['required', 'integer', 'min:0'],
             'items.*.duration_seconds' => ['nullable', 'integer', 'min:1'],
-            'items.*.watched_at' => ['nullable', 'string'],
+            'items.*.watched_at' => ['nullable', 'date'],
         ];
     }
 

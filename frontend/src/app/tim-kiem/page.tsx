@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getFilteredMovies } from "@/lib/api";
-import SearchClientView from "@/components/movie/SearchClientView";
+import MovieCategoryView from "@/components/movie/MovieCategoryView";
+import MovieGridSkeleton from "@/components/ui/skeletons/MovieGridSkeleton";
 
 interface PageProps {
   searchParams: Promise<{
@@ -54,28 +55,27 @@ async function SearchResults({ searchParams }: PageProps) {
   }));
 
   return (
-    <SearchClientView
+    <MovieCategoryView
+      title="Tìm kiếm phim"
       keyword={query}
       movies={response.data}
-      meta={response.meta}
+      pagination={response.meta}
+      currentParams={{
+        type: params.type,
+        genre: params.genre,
+        country: params.country,
+        lang: params.lang,
+        year: params.year,
+        sort: params.sort,
+      }}
+      defaultFilterOpen={true}
     />
   );
 }
 
 export default function SearchPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-base pt-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6 animate-pulse">
-          <div className="h-10 w-64 bg-surface/60 rounded-xl" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="aspect-[2/3] bg-surface/40 rounded-xl" />
-            ))}
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<MovieGridSkeleton count={24} />}>
       <SearchResults {...props} />
     </Suspense>
   );

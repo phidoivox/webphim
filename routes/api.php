@@ -17,6 +17,11 @@ use App\Http\Controllers\Api\V1\HistoryController;
 use App\Http\Controllers\Api\V1\HomeController;
 use App\Http\Controllers\Api\V1\MovieController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\PublicCollectionController;
+use App\Http\Controllers\Api\V1\PublicProfileController;
+use App\Http\Controllers\Api\V1\UserCollectionController;
+use App\Http\Controllers\Api\V1\UserProfileController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
@@ -83,14 +88,37 @@ Route::prefix('v1/notifications')->middleware('auth:sanctum')->group(function ()
     Route::delete('/{id}', [NotificationController::class, 'destroy']);
 });
 
+// Episode / Video Issue Reports (Guest & Authenticated with rate limiting)
+Route::post('/v1/reports', [ReportController::class, 'store'])->middleware('throttle:6,1');
+
+// User Profile & Personal Collections (Sanctum Protected)
+Route::prefix('v1/user')->middleware('auth:sanctum')->group(function () {
+    Route::get('/profile', [UserProfileController::class, 'show']);
+    Route::put('/profile', [UserProfileController::class, 'update']);
+
+    Route::get('/collections', [UserCollectionController::class, 'index']);
+    Route::post('/collections', [UserCollectionController::class, 'store']);
+    Route::get('/collections/{id}', [UserCollectionController::class, 'show'])->whereNumber('id');
+    Route::put('/collections/{id}', [UserCollectionController::class, 'update'])->whereNumber('id');
+    Route::delete('/collections/{id}', [UserCollectionController::class, 'destroy'])->whereNumber('id');
+    Route::post('/collections/{id}/movies', [UserCollectionController::class, 'addMovie'])->whereNumber('id');
+    Route::delete('/collections/{id}/movies/{movieId}', [UserCollectionController::class, 'removeMovie'])
+        ->whereNumber(['id', 'movieId']);
+});
+
+// Realtime dynamic search (không cache HTTP tĩnh để kết quả tìm kiếm luôn tức thời, đặt trước wildcard {movie})
+Route::get('/v1/movies/search', [MovieController::class, 'search']);
+
+// Public Taxonomy & Home endpoints with HTTP Cache-Control + ETag
 Route::middleware('cache.headers:public;max_age=300;etag')->group(function () {
     Route::get('/v1/genres', [GenreController::class, 'index']);
     Route::get('/v1/countries', [CountryController::class, 'index']);
     Route::get('/v1/home', [HomeController::class, 'index']);
-    Route::get('/v1/movies/search', [MovieController::class, 'search']);
     Route::get('/v1/movies', [MovieController::class, 'index']);
     Route::get('/v1/movies/{movie}', [MovieController::class, 'show']);
     Route::get('/v1/schedule', [ScheduleController::class, 'index']);
+    Route::get('/v1/users/{id}', [PublicProfileController::class, 'show'])->whereNumber('id');
+    Route::get('/v1/collections/{slug}', [PublicCollectionController::class, 'show']);
 });
 
 // Admin Management Routes (Sanctum + Admin Guard)
@@ -101,7 +129,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     // Movies Management
     Route::get('/movies', [AdminMovieController::class, 'index']);
     Route::post('/movies', [AdminMovieController::class, 'store']);
-    Route::post('/movies/bulk', [AdminMovieController::class, 'bulk']);
+    Route::post('/movies/bulk-action', [AdminMovieController::class, 'bulkAction']);
     Route::get('/movies/{id}', [AdminMovieController::class, 'show'])->whereNumber('id');
     Route::put('/movies/{id}', [AdminMovieController::class, 'update'])->whereNumber('id');
     Route::delete('/movies/{id}', [AdminMovieController::class, 'destroy'])->whereNumber('id');
@@ -120,6 +148,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     // Episodes & Servers Management
     Route::get('/movies/{movieId}/episodes', [AdminEpisodeController::class, 'index'])->whereNumber('movieId');
     Route::post('/movies/{movieId}/episodes', [AdminEpisodeController::class, 'store'])->whereNumber('movieId');
+    Route::post('/movies/{movieId}/episodes/sync', [AdminEpisodeController::class, 'sync'])->whereNumber('movieId');
     Route::put('/episodes/{id}', [AdminEpisodeController::class, 'update'])->whereNumber('id');
     Route::delete('/episodes/{id}', [AdminEpisodeController::class, 'destroy'])->whereNumber('id');
     Route::post('/episodes/{episodeId}/servers', [AdminEpisodeController::class, 'storeServer'])->whereNumber('episodeId');
@@ -138,6 +167,8 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
 
     Route::get('/people', [AdminTaxonomyController::class, 'people']);
     Route::post('/people', [AdminTaxonomyController::class, 'storePerson']);
+    Route::put('/people/{id}', [AdminTaxonomyController::class, 'updatePerson'])->whereNumber('id');
+    Route::delete('/people/{id}', [AdminTaxonomyController::class, 'destroyPerson'])->whereNumber('id');
 
     // Users Management
     Route::get('/users', [AdminUserController::class, 'index']);

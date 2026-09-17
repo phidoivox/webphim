@@ -1,12 +1,13 @@
 import { Suspense } from "react";
-import { getHomeData } from "@/lib/api";
+import { getCachedHome } from "@/lib/cached-content";
 import HeroBanner from "@/components/home/HeroBanner";
 import CarouselRow from "@/components/home/CarouselRow";
+import HomeSkeleton from "@/components/ui/skeletons/HomeSkeleton";
 
 async function HomeContent() {
   let data;
   try {
-    data = await getHomeData();
+    data = await getCachedHome();
   } catch (error) {
     console.error("Lỗi khi tải dữ liệu trang chủ:", error);
     data = { heroMovies: [], sections: [] };
@@ -26,13 +27,7 @@ async function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-base">
-          <div className="h-[460px] lg:h-[540px] w-full bg-surface/60 animate-shimmer" />
-        </div>
-      }
-    >
+    <Suspense fallback={<HomeSkeleton />}>
       <HomeContent />
     </Suspense>
   );

@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getMovieDetail, NotFoundError } from "@/lib/api";
+import { NotFoundError } from "@/lib/api";
+import { getCachedMovieDetail } from "@/lib/cached-content";
 import MovieDetailView from "@/components/movie/MovieDetailView";
+import MovieDetailSkeleton from "@/components/ui/skeletons/MovieDetailSkeleton";
 import MovieJsonLd from "@/components/seo/MovieJsonLd";
 
 interface PageProps {
@@ -13,7 +15,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
 
   try {
-    const movie = await getMovieDetail(slug);
+    const movie = await getCachedMovieDetail(slug);
     const title = `${movie.name} (${movie.year || 2026}) - Xem Phim ${movie.quality || "HD"} Vietsub | WebPhim`;
     const description = movie.content
       ? movie.content.slice(0, 160)
@@ -55,7 +57,7 @@ async function MovieDetailContent({ params }: PageProps) {
 
   let movie;
   try {
-    movie = await getMovieDetail(slug);
+    movie = await getCachedMovieDetail(slug);
   } catch (error) {
     if (error instanceof NotFoundError) {
       notFound();
@@ -73,13 +75,7 @@ async function MovieDetailContent({ params }: PageProps) {
 
 export default function MovieDetailPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-base animate-pulse">
-          <div className="h-[460px] lg:h-[540px] w-full bg-surface/60" />
-        </div>
-      }
-    >
+    <Suspense fallback={<MovieDetailSkeleton />}>
       <MovieDetailContent {...props} />
     </Suspense>
   );

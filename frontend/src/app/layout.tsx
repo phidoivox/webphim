@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Suspense } from "react";
@@ -7,6 +7,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { BookmarkProvider } from "@/context/BookmarkContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { QueryProvider } from "@/context/QueryProvider";
+import { getSiteUrl } from "@/lib/env";
 import { Toaster } from "sonner";
 
 const spaceGrotesk = Space_Grotesk({
@@ -14,8 +15,15 @@ const spaceGrotesk = Space_Grotesk({
   subsets: ["latin", "vietnamese"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0e0e10",
+};
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  metadataBase: new URL(getSiteUrl()),
   title: "PHIM HAY — Xem phim online mới nhất",
   description:
     "Xem phim bộ, phim lẻ chất lượng cao miễn phí — cập nhật phim mới mỗi ngày.",

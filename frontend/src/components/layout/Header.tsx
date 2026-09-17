@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -8,7 +8,6 @@ import { MenuIcon, PlayIcon, SearchIcon, StarIcon, UserIcon, XIcon } from "@/com
 import { searchLiveSuggestions } from "@/lib/api";
 import type { ActorSummary, MovieSummary } from "@/types/movie";
 import { useDebounce } from "@/hooks/useDebounce";
-import { cn } from "@/lib/utils";
 import GenreDropdown from "./GenreDropdown";
 import CountryDropdown from "./CountryDropdown";
 import MobileNavDrawer from "./MobileNavDrawer";
@@ -27,11 +26,25 @@ const NAV_AFTER = [
   { href: "/lich-chieu", label: "Lịch chiếu", fallbackHref: "/lich-chieu" },
 ];
 
+function subscribeScroll(callback: () => void) {
+  window.addEventListener("scroll", callback, { passive: true });
+  return () => window.removeEventListener("scroll", callback);
+}
+
+function getScrollSnapshot(): boolean {
+  return window.scrollY > 20;
+}
+
+function getServerScrollSnapshot(): boolean {
+  return false;
+}
+
 export default function Header() {
   const { isAuthenticated } = useAuth();
   const [mounted, setMounted] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const isScrolled = useSyncExternalStore(subscribeScroll, getScrollSnapshot, getServerScrollSnapshot);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query.trim(), 250);
   const [suggestions, setSuggestions] = useState<{ movies: MovieSummary[]; actors: ActorSummary[] }>({
@@ -48,41 +61,41 @@ export default function Header() {
 
   useEffect(() => {
     setMounted(true);
-    const handleScroll = () => {
-      const scrolled = window.scrollY > 20;
-      setIsScrolled((prev) => (prev !== scrolled ? scrolled : prev));
-    };
-
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const handleQueryChange = (val: string) => {
     setQuery(val);
-    if (val.trim().length < 2) {
+    if (!val.trim()) {
       setSuggestions({ movies: [], actors: [] });
       setIsOpenSuggestions(false);
+    } else {
+      setIsOpenSuggestions(true);
     }
   };
 
   // Live search theo debouncedQuery
   useEffect(() => {
-    if (debouncedQuery.length < 2) {
+    const trimmed = debouncedQuery.trim();
+    if (!trimmed) {
+      setSuggestions({ movies: [], actors: [] });
+      setIsOpenSuggestions(false);
       return;
     }
 
     let isSubscribed = true;
+    const controller = new AbortController();
     setIsLoading(true);
+    setIsOpenSuggestions(true);
 
-    searchLiveSuggestions(debouncedQuery, 5)
+    searchLiveSuggestions(trimmed, 5, false, controller.signal)
       .then((results) => {
         if (isSubscribed) {
-          setSuggestions(results);
+          setSuggestions(results || { movies: [], actors: [] });
           setIsOpenSuggestions(true);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         if (isSubscribed) {
           setSuggestions({ movies: [], actors: [] });
         }
@@ -95,6 +108,7 @@ export default function Header() {
 
     return () => {
       isSubscribed = false;
+      controller.abort();
     };
   }, [debouncedQuery]);
 
@@ -152,24 +166,25 @@ export default function Header() {
         />
 
         {/* Nội dung Header */}
-        <div className="relative z-10 mx-auto flex h-14 max-w-[1600px] items-center gap-2 sm:gap-3 lg:gap-4 lg:h-16 px-4 sm:px-6 lg:px-8">
+        <div className="relative z-10 mx-auto flex h-14 max-w-[1600px] items-center gap-1.5 sm:gap-3 lg:gap-4 lg:h-16 px-2.5 sm:px-6 lg:px-8">
           {/* Nút Hamburger cho Mobile */}
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(true)}
-            aria-label="Mở menu"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition lg:hidden"
+            aria-label="Mở menu điều hướng"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition active:scale-95 lg:hidden"
           >
-            <MenuIcon className="h-6 w-6" />
+            <MenuIcon className="h-5.5 w-5.5" />
           </button>
 
           {/* Logo Brand */}
           <Link
             href="/"
-            className="flex shrink-0 whitespace-nowrap items-center gap-1.5 font-display text-lg font-extrabold tracking-tight text-ink lg:text-xl"
+            className="flex shrink-0 whitespace-nowrap items-center gap-1.5 font-display text-base font-extrabold tracking-tight text-ink sm:text-lg lg:text-xl"
           >
-            <PlayIcon className="h-5 w-5 text-accent" />
-            <span>PHIM HAY</span>
+            <PlayIcon className="h-4.5 w-4.5 sm:h-5 sm:w-5 text-accent shrink-0" />
+            <span className="hidden xs:inline">PHIM HAY</span>
+            <span className="xs:hidden">PHIM</span>
           </Link>
 
           {/* Desktop Navigation Links */}
@@ -224,18 +239,18 @@ export default function Header() {
           </nav>
 
           {/* Ô Tìm Kiếm Header với Live Dropdown */}
-          <div ref={searchContainerRef} className="relative ml-auto flex items-center shrink-0">
+          <div ref={searchContainerRef} className="relative ml-auto flex items-center min-w-0">
             <form onSubmit={handleSearch} className="relative flex items-center">
-              <SearchIcon className="pointer-events-none absolute left-3.5 z-10 h-4 w-4 text-white/80" />
+              <SearchIcon className="pointer-events-none absolute left-3 z-10 h-3.5 w-3.5 sm:h-4 sm:w-4 text-white/70" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 onFocus={() => {
-                  if (hasResults) setIsOpenSuggestions(true);
+                  if (query.trim()) setIsOpenSuggestions(true);
                 }}
-                placeholder="Tìm phim, diễn viên..."
-                className="h-9 w-44 sm:w-56 md:w-64 lg:w-72 xl:w-80 rounded-full border border-white/15 bg-white/10 pl-9 pr-8 text-xs text-white placeholder:text-white/50 backdrop-blur-md transition-colors focus:border-accent focus:bg-white/15 focus:outline-none focus:ring-1 focus:ring-accent/40 sm:text-sm"
+                placeholder="Tìm phim..."
+                className="h-8.5 sm:h-9 w-28 xs:w-36 sm:w-52 md:w-64 lg:w-72 xl:w-80 rounded-full border border-white/15 bg-white/10 pl-8 sm:pl-9 pr-7 sm:pr-8 text-xs text-white placeholder:text-white/50 backdrop-blur-md transition-all focus:border-accent focus:bg-white/15 focus:outline-none focus:ring-1 focus:ring-accent/40 sm:text-sm"
               />
               {query && (
                 <button
@@ -245,7 +260,7 @@ export default function Header() {
                     setSuggestions({ movies: [], actors: [] });
                     setIsOpenSuggestions(false);
                   }}
-                  className="absolute right-2.5 z-10 flex h-4 w-4 items-center justify-center rounded-full text-white/50 hover:text-white transition"
+                  className="absolute right-2.5 z-10 flex h-4 w-4 items-center justify-center rounded-full text-white/50 hover:text-white transition cursor-pointer"
                   aria-label="Xóa tìm kiếm"
                 >
                   <XIcon className="h-3.5 w-3.5" />
@@ -255,9 +270,22 @@ export default function Header() {
 
             {/* Dropdown Gợi Ý Tìm Kiếm Nhanh */}
             {isOpenSuggestions && (
-              <div className="absolute top-full right-0 z-50 mt-2 max-h-[80vh] w-72 sm:w-80 md:w-96 overflow-y-auto rounded-2xl border border-white/15 bg-[#14141a]/95 p-2.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute top-full right-0 z-50 mt-2 max-h-[75vh] w-[calc(100vw-1.5rem)] sm:w-80 md:w-96 max-w-[380px] overflow-y-auto rounded-2xl border border-white/15 bg-[#14141a]/95 p-2.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
                 {isLoading ? (
-                  <div className="py-6 text-center text-xs text-white/50">Đang tìm kiếm...</div>
+                  <div className="space-y-2 p-1 select-none">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 rounded-xl p-2 bg-white/[0.02] border border-white/5 animate-shimmer"
+                      >
+                        <div className="h-12 w-9 shrink-0 rounded-md bg-white/10" />
+                        <div className="flex-1 space-y-1.5 min-w-0">
+                          <div className="h-3.5 w-4/5 rounded bg-white/15 animate-pulse" />
+                          <div className="h-2.5 w-1/2 rounded bg-white/5" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : hasResults ? (
                   <div className="space-y-3">
                     {/* Mục PHIM */}
@@ -395,7 +423,7 @@ export default function Header() {
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer
         isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
+        onClose={closeMobileMenu}
       />
     </>
   );

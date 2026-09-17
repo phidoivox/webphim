@@ -2,17 +2,21 @@
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Enums\ServerLangType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Admin\AdminBulkActionRequest;
 use App\Http\Requests\Api\V1\Admin\StoreMovieRequest;
 use App\Http\Requests\Api\V1\Admin\UpdateMovieRequest;
+use App\Http\Resources\Api\V1\Admin\AdminMovieDetailResource;
+use App\Http\Resources\Api\V1\Admin\AdminMovieListResource;
 use App\Models\AuditLog;
+use App\Models\Episode;
 use App\Models\Movie;
 use App\Models\Person;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class AdminMovieController extends Controller
@@ -74,51 +78,19 @@ class AdminMovieController extends Controller
         $perPage = min(max($request->integer('per_page', 20), 1), 100);
         $paginator = $query->paginate($perPage);
 
-        $items = collect($paginator->items())->map(fn (Movie $m) => [
-            'id' => $m->id,
-            'name' => $m->name,
-            'originName' => $m->origin_name,
-            'slug' => $m->slug,
-            'thumbUrl' => $m->thumb_url,
-            'posterUrl' => $m->poster_url,
-            'type' => $m->type instanceof \BackedEnum ? $m->type->value : $m->type,
-            'status' => $m->status instanceof \BackedEnum ? $m->status->value : $m->status,
-            'quality' => $m->quality instanceof \BackedEnum ? $m->quality->value : $m->quality,
-            'year' => $m->year,
-            'episodeCurrent' => $m->episode_current,
-            'episodeTotal' => $m->episode_total,
-            'viewCount' => $m->view_count,
-            'ratingAvg' => (float) $m->rating_avg,
-            'isActive' => (bool) $m->is_active,
-            'isFeatured' => (bool) $m->is_featured,
-            'isCinema' => (bool) $m->is_cinema,
-            'genres' => $m->genres->map(fn ($g) => ['id' => $g->id, 'name' => $g->name]),
-            'countries' => $m->countries->map(fn ($c) => ['id' => $c->id, 'name' => $c->name]),
-            'createdAt' => $m->created_at?->toISOString(),
-            'updatedAt' => $m->updated_at?->toISOString(),
-        ]);
-
         $counts = Movie::query()
             ->selectRaw('count(*) as total, sum(case when is_active = 1 then 1 else 0 end) as active, sum(case when type = "series" then 1 else 0 end) as series, sum(case when type = "single" then 1 else 0 end) as single, sum(case when is_featured = 1 then 1 else 0 end) as featured, sum(case when is_cinema = 1 then 1 else 0 end) as cinema, sum(case when is_active = 0 then 1 else 0 end) as hidden')
             ->first();
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $items,
-            'meta' => [
-                'currentPage' => $paginator->currentPage(),
-                'lastPage' => $paginator->lastPage(),
-                'perPage' => $paginator->perPage(),
-                'total' => $paginator->total(),
-                'counts' => [
-                    'total' => (int) ($counts->total ?? 0),
-                    'active' => (int) ($counts->active ?? 0),
-                    'series' => (int) ($counts->series ?? 0),
-                    'single' => (int) ($counts->single ?? 0),
-                    'featured' => (int) ($counts->featured ?? 0),
-                    'cinema' => (int) ($counts->cinema ?? 0),
-                    'hidden' => (int) ($counts->hidden ?? 0),
-                ],
+        return response()->paginated($paginator, AdminMovieListResource::class, [
+            'counts' => [
+                'total' => (int) ($counts->total ?? 0),
+                'active' => (int) ($counts->active ?? 0),
+                'series' => (int) ($counts->series ?? 0),
+                'single' => (int) ($counts->single ?? 0),
+                'featured' => (int) ($counts->featured ?? 0),
+                'cinema' => (int) ($counts->cinema ?? 0),
+                'hidden' => (int) ($counts->hidden ?? 0),
             ],
         ]);
     }
@@ -132,13 +104,20 @@ class AdminMovieController extends Controller
 
         if (empty($validated['slug'])) {
             $baseSlug = Str::slug($validated['name']);
-            $slug = $baseSlug;
-            $counter = 1;
-            while (Movie::query()->where('slug', $slug)->exists()) {
-                $slug = "{$baseSlug}-{$counter}";
-                $counter++;
+            $existingSlugs = Movie::query()
+                ->where('slug', $baseSlug)
+                ->orWhere('slug', 'like', "{$baseSlug}-%")
+                ->pluck('slug')
+                ->all();
+
+            if (in_array($baseSlug, $existingSlugs, true)) {
+                $counter = 1;
+                while (in_array("{$baseSlug}-{$counter}", $existingSlugs, true)) {
+                    $counter++;
+                }
+                $baseSlug = "{$baseSlug}-{$counter}";
             }
-            $validated['slug'] = $slug;
+            $validated['slug'] = $baseSlug;
         }
 
         $movie = DB::transaction(function () use ($validated) {
@@ -149,8 +128,9 @@ class AdminMovieController extends Controller
             $actors = $validated['actors'] ?? [];
             $directors = $validated['directors'] ?? [];
             $galleries = $validated['galleries'] ?? [];
+            $episodes = $validated['episodes'] ?? [];
 
-            unset($validated['genre_ids'], $validated['country_ids'], $validated['tag_ids'], $validated['tags'], $validated['actors'], $validated['directors'], $validated['galleries']);
+            unset($validated['genre_ids'], $validated['country_ids'], $validated['tag_ids'], $validated['tags'], $validated['actors'], $validated['directors'], $validated['galleries'], $validated['episodes']);
 
             $movie = Movie::query()->create($validated);
 
@@ -183,6 +163,10 @@ class AdminMovieController extends Controller
                 }
             }
 
+            if (! empty($episodes)) {
+                $this->syncEpisodes($movie, $episodes);
+            }
+
             return $movie;
         });
 
@@ -204,11 +188,11 @@ class AdminMovieController extends Controller
     {
         $movie = Movie::query()
             ->with([
-                'genres:id,name,slug',
-                'countries:id,name,slug',
-                'tags:id,name,slug',
-                'actors:id,name,avatar_url',
-                'directors:id,name,avatar_url',
+                'genres',
+                'countries',
+                'tags',
+                'actors',
+                'directors',
                 'episodes.servers',
                 'galleries',
             ])
@@ -216,76 +200,7 @@ class AdminMovieController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => [
-                'id' => $movie->id,
-                'name' => $movie->name,
-                'originName' => $movie->origin_name,
-                'slug' => $movie->slug,
-                'content' => $movie->content,
-                'type' => $movie->type instanceof \BackedEnum ? $movie->type->value : $movie->type,
-                'status' => $movie->status instanceof \BackedEnum ? $movie->status->value : $movie->status,
-                'quality' => $movie->quality instanceof \BackedEnum ? $movie->quality->value : $movie->quality,
-                'lang' => $movie->lang,
-                'thumbUrl' => $movie->thumb_url,
-                'posterUrl' => $movie->poster_url,
-                'trailerUrl' => $movie->trailer_url,
-                'duration' => $movie->duration,
-                'durationMinutes' => $movie->duration_minutes,
-                'episodeCurrent' => $movie->episode_current,
-                'episodeTotal' => $movie->episode_total,
-                'notifySchedule' => $movie->notify_schedule,
-                'scheduleDayOfWeek' => $movie->schedule_day_of_week,
-                'year' => $movie->year,
-                'tmdbRating' => $movie->tmdb_rating,
-                'imdbRating' => $movie->imdb_rating,
-                'tmdbId' => $movie->tmdb_id,
-                'imdbId' => $movie->imdb_id,
-                'sourceUrl' => $movie->source_url,
-                'metaTitle' => $movie->meta_title,
-                'metaDescription' => $movie->meta_description,
-                'metaKeywords' => $movie->meta_keywords,
-                'ratingAvg' => $movie->rating_avg,
-                'viewCount' => $movie->view_count,
-                'isFeatured' => (bool) $movie->is_featured,
-                'isCinema' => (bool) $movie->is_cinema,
-                'isActive' => (bool) $movie->is_active,
-                'genres' => $movie->genres->map(fn ($g) => ['id' => $g->id, 'name' => $g->name, 'slug' => $g->slug]),
-                'countries' => $movie->countries->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'slug' => $c->slug]),
-                'tags' => $movie->tags->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'slug' => $t->slug]),
-                'actors' => $movie->actors->map(fn ($a) => [
-                    'id' => $a->id,
-                    'name' => $a->name,
-                    'characterName' => $a->pivot->character_name ?? null,
-                ]),
-                'directors' => $movie->directors->map(fn ($d) => [
-                    'id' => $d->id,
-                    'name' => $d->name,
-                ]),
-                'episodes' => $movie->episodes->map(fn ($ep) => [
-                    'id' => $ep->id,
-                    'name' => $ep->name,
-                    'slug' => $ep->slug,
-                    'sortOrder' => $ep->sort_order,
-                    'servers' => $ep->servers->map(fn ($s) => [
-                        'id' => $s->id,
-                        'serverName' => $s->server_name,
-                        'langType' => $s->lang_type instanceof \BackedEnum ? $s->lang_type->value : $s->lang_type,
-                        'linkM3u8' => $s->link_m3u8,
-                        'linkEmbed' => $s->link_embed,
-                        'sortOrder' => $s->sort_order,
-                        'isActive' => (bool) $s->is_active,
-                    ]),
-                ]),
-                'galleries' => $movie->galleries->map(fn ($g) => [
-                    'id' => $g->id,
-                    'mediaType' => $g->media_type,
-                    'type' => $g->type,
-                    'url' => $g->url,
-                    'thumbUrl' => $g->thumb_url,
-                    'caption' => $g->caption,
-                    'sortOrder' => $g->sort_order,
-                ]),
-            ],
+            'data' => new AdminMovieDetailResource($movie),
         ]);
     }
 
@@ -305,8 +220,9 @@ class AdminMovieController extends Controller
             $actors = $validated['actors'] ?? null;
             $directors = $validated['directors'] ?? null;
             $galleries = $validated['galleries'] ?? null;
+            $episodes = $validated['episodes'] ?? null;
 
-            unset($validated['genre_ids'], $validated['country_ids'], $validated['tag_ids'], $validated['tags'], $validated['actors'], $validated['directors'], $validated['galleries']);
+            unset($validated['genre_ids'], $validated['country_ids'], $validated['tag_ids'], $validated['tags'], $validated['actors'], $validated['directors'], $validated['galleries'], $validated['episodes']);
 
             $movie->update($validated);
 
@@ -342,6 +258,10 @@ class AdminMovieController extends Controller
                 if (! empty($galleryRows)) {
                     $movie->galleries()->createMany($galleryRows);
                 }
+            }
+
+            if ($episodes !== null && ! empty($episodes)) {
+                $this->syncEpisodes($movie, $episodes);
             }
         });
 
@@ -397,17 +317,9 @@ class AdminMovieController extends Controller
     /**
      * Thao tác hàng loạt trên danh sách phim (bật/tắt trạng thái hoặc xóa).
      */
-    public function bulkAction(Request $request): JsonResponse
+    public function bulkAction(AdminBulkActionRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'action' => [
-                'required',
-                'string',
-                'in:is_active_on,is_active_off,is_featured_on,is_featured_off,is_cinema_on,is_cinema_off,delete,activate,deactivate,feature,unfeature,cinema,uncinema',
-            ],
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['required', 'integer'],
-        ]);
+        $validated = $request->validated();
 
         $rawAction = $validated['action'];
         $action = match ($rawAction) {
@@ -423,26 +335,24 @@ class AdminMovieController extends Controller
         $ids = array_values(array_unique(array_map('intval', $validated['ids'])));
 
         $affected = DB::transaction(function () use ($action, $ids, $request) {
-            $count = match ($action) {
-                'is_active_on' => Movie::query()->whereIn('id', $ids)->update(['is_active' => true]),
-                'is_active_off' => Movie::query()->whereIn('id', $ids)->update(['is_active' => false]),
-                'is_featured_on' => Movie::query()->whereIn('id', $ids)->update(['is_featured' => true]),
-                'is_featured_off' => Movie::query()->whereIn('id', $ids)->update(['is_featured' => false]),
-                'is_cinema_on' => Movie::query()->whereIn('id', $ids)->update(['is_cinema' => true]),
-                'is_cinema_off' => Movie::query()->whereIn('id', $ids)->update(['is_cinema' => false]),
-                'delete' => (function () use ($ids) {
-                    $movies = Movie::query()->whereIn('id', $ids)->get();
-                    $deleted = 0;
-                    foreach ($movies as $movie) {
-                        $movie->delete();
-                        $deleted++;
-                    }
+            $movies = Movie::query()->whereIn('id', $ids)->get();
+            $count = 0;
 
-                    return $deleted;
-                })(),
-            };
+            foreach ($movies as $movie) {
+                match ($action) {
+                    'is_active_on' => $movie->update(['is_active' => true]),
+                    'is_active_off' => $movie->update(['is_active' => false]),
+                    'is_featured_on' => $movie->update(['is_featured' => true]),
+                    'is_featured_off' => $movie->update(['is_featured' => false]),
+                    'is_cinema_on' => $movie->update(['is_cinema' => true]),
+                    'is_cinema_off' => $movie->update(['is_cinema' => false]),
+                    'delete' => $movie->delete(),
+                    default => null,
+                };
+                $count++;
+            }
 
-            if (Schema::hasTable('audit_logs')) {
+            try {
                 AuditLog::query()->create([
                     'user_id' => $request->user()?->id,
                     'action' => 'bulk_action',
@@ -457,6 +367,8 @@ class AdminMovieController extends Controller
                     'user_agent' => substr((string) $request->userAgent(), 0, 500),
                     'created_at' => now(),
                 ]);
+            } catch (\Throwable) {
+                // Audit log fallback
             }
 
             return $count;
@@ -589,5 +501,51 @@ class AdminMovieController extends Controller
         }
 
         $movie->tags()->sync($tagIds);
+    }
+
+    /**
+     * Đồng bộ danh sách tập và các server phát cho một bộ phim.
+     *
+     * @param  array<int, array<string, mixed>>  $episodes
+     */
+    protected function syncEpisodes(Movie $movie, array $episodes): void
+    {
+        foreach ($episodes as $idx => $epData) {
+            $epName = trim((string) ($epData['name'] ?? ''));
+            $epSlug = trim((string) ($epData['slug'] ?? ''));
+            if ($epName === '' || $epSlug === '') {
+                continue;
+            }
+
+            $sortOrder = isset($epData['sort_order']) ? (int) $epData['sort_order'] : ($idx + 1);
+
+            /** @var Episode $episode */
+            $episode = $movie->episodes()->updateOrCreate(
+                ['slug' => $epSlug],
+                [
+                    'name' => $epName,
+                    'sort_order' => $sortOrder,
+                ]
+            );
+
+            $servers = $epData['servers'] ?? [];
+            if (! empty($servers) && is_array($servers)) {
+                foreach ($servers as $sIdx => $sData) {
+                    $serverName = trim((string) ($sData['server_name'] ?? 'VIP'));
+                    $langType = ServerLangType::fromString($sData['lang_type'] ?? null);
+
+                    $episode->servers()->updateOrCreate(
+                        ['server_name' => $serverName],
+                        [
+                            'lang_type' => $langType,
+                            'link_m3u8' => $sData['link_m3u8'] ?? null,
+                            'link_embed' => $sData['link_embed'] ?? null,
+                            'sort_order' => isset($sData['sort_order']) ? (int) $sData['sort_order'] : ($sIdx + 1),
+                            'is_active' => isset($sData['is_active']) ? (bool) $sData['is_active'] : true,
+                        ]
+                    );
+                }
+            }
+        }
     }
 }

@@ -66,7 +66,7 @@ class AdminNotificationTest extends TestCase
 
         $response->assertOk()
             ->assertJson([
-                'success' => true,
+                'status' => 'success',
             ])
             ->assertJsonPath('data.sentCount', 5); // 1 admin + 1 regular + 3 new = 5 users
 

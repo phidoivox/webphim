@@ -29,13 +29,15 @@ export interface NotificationPaginationMeta {
 }
 
 export interface NotificationListResponse {
-  success: boolean;
+  status?: "success" | "error";
+  success?: boolean;
   data: NotificationItem[];
   meta: NotificationPaginationMeta;
 }
 
 export interface UnreadCountResponse {
-  success: boolean;
+  status?: "success" | "error";
+  success?: boolean;
   data: {
     unreadCount: number;
   };
@@ -49,7 +51,8 @@ export interface BroadcastNotificationPayload {
 }
 
 export interface BroadcastNotificationResponse {
-  success: boolean;
+  status?: "success" | "error";
+  success?: boolean;
   message: string;
   data: {
     sentCount: number;

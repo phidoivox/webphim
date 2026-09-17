@@ -2,6 +2,7 @@
 
 import Echo from "laravel-echo";
 import Pusher from "pusher-js";
+import { getApiUrl, getReverbConfig } from "@/lib/env";
 
 declare global {
   interface Window {
@@ -18,16 +19,12 @@ export function getEchoInstance(token?: string | null): Echo<"reverb"> | null {
     return null;
   }
 
-  const appKey = process.env.NEXT_PUBLIC_REVERB_APP_KEY;
+  const { appKey, wsHost, wsPort, isTls } = getReverbConfig();
   if (!appKey) {
     return null;
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://webphim.test/api";
-  const wsHost = process.env.NEXT_PUBLIC_REVERB_HOST || "localhost";
-  const wsPort = Number(process.env.NEXT_PUBLIC_REVERB_PORT) || 8080;
-  const wsScheme = process.env.NEXT_PUBLIC_REVERB_SCHEME || "http";
-  const isTls = wsScheme === "https";
+  const apiUrl = getApiUrl();
 
   // Re-create instance if token changed
   if (echoInstance && currentToken !== (token || null)) {

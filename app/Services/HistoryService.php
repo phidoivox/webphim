@@ -112,22 +112,44 @@ class HistoryService
                 $progress = (int) ($item['progress_seconds'] ?? 0);
                 $duration = isset($item['duration_seconds']) ? (int) $item['duration_seconds'] : null;
                 $isCompleted = ($duration && $duration > 0) ? (($progress / $duration) >= 0.9) : false;
-                $watchedAt = ! empty($item['watched_at']) ? Carbon::parse($item['watched_at']) : now();
+                try {
+                    $watchedAt = ! empty($item['watched_at']) ? Carbon::parse($item['watched_at']) : now();
+                } catch (\Throwable) {
+                    $watchedAt = now();
+                }
 
-                WatchHistory::updateOrCreate(
-                    [
+                $existing = WatchHistory::where('user_id', $user->id)
+                    ->where('movie_id', $item['movie_id'])
+                    ->where('episode_id', $item['episode_id'] ?? null)
+                    ->first();
+
+                if ($existing) {
+                    $isGuestNewer = $watchedAt->greaterThan($existing->watched_at ?? $existing->updated_at);
+                    $isGuestFurther = $progress > $existing->progress_seconds;
+
+                    if (! $isGuestNewer && ! $isGuestFurther) {
+                        continue;
+                    }
+
+                    $existing->update([
+                        'server_id' => $item['server_id'] ?? $existing->server_id,
+                        'progress_seconds' => max($progress, $existing->progress_seconds),
+                        'duration_seconds' => $duration ?: $existing->duration_seconds,
+                        'is_completed' => $isCompleted || (bool) $existing->is_completed,
+                        'watched_at' => $isGuestNewer ? $watchedAt : $existing->watched_at,
+                    ]);
+                } else {
+                    WatchHistory::create([
                         'user_id' => $user->id,
                         'movie_id' => $item['movie_id'],
                         'episode_id' => $item['episode_id'] ?? null,
-                    ],
-                    [
                         'server_id' => $item['server_id'] ?? null,
                         'progress_seconds' => $progress,
                         'duration_seconds' => $duration,
                         'is_completed' => $isCompleted,
                         'watched_at' => $watchedAt,
-                    ]
-                );
+                    ]);
+                }
 
                 $count++;
             }

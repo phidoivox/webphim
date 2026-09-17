@@ -287,9 +287,9 @@ export default function HistoryView() {
         {loading ? (
           <div className="grid grid-cols-2 gap-4 pt-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="animate-pulse space-y-2">
-                <div className="aspect-[2/3] w-full rounded-2xl bg-white/5" />
-                <div className="h-3.5 w-3/4 rounded-md bg-white/5" />
+              <div key={i} className="space-y-2 select-none">
+                <div className="aspect-[2/3] w-full rounded-2xl bg-surface border border-white/5 shadow-md animate-shimmer" />
+                <div className="h-3.5 w-3/4 rounded-md bg-white/15 animate-pulse" />
                 <div className="h-2.5 w-1/2 rounded-md bg-white/5" />
               </div>
             ))}
@@ -328,7 +328,7 @@ export default function HistoryView() {
                       : "";
                   const watchUrl = episode?.slug
                     ? `/xem/${movie.slug}/${episode.slug}${timeParam}`
-                    : `/xem/${movie.slug}/tap-1${timeParam}`;
+                    : `/xem/${movie.slug}${timeParam}`;
 
                   return (
                     <div
@@ -440,7 +440,7 @@ export default function HistoryView() {
                       : "";
                   const watchUrl = item.episode_slug
                     ? `/xem/${item.movie_slug}/${item.episode_slug}${timeParam}`
-                    : `/xem/${item.movie_slug}/tap-1${timeParam}`;
+                    : `/xem/${item.movie_slug}${timeParam}`;
 
                   return (
                     <div

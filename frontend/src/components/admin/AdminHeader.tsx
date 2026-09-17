@@ -30,11 +30,16 @@ const PATH_MAP: Record<string, string> = {
 export default function AdminHeader() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const [mounted, setMounted] = React.useState(false);
   const {
     setIsMobileNavOpen,
     openCommandPalette,
     pendingReportsCount,
   } = useAdmin();
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Dynamic breadcrumbs based on pathname segments
   const breadcrumbs = useMemo(() => {
@@ -143,12 +148,18 @@ export default function AdminHeader() {
         {/* User Badge & Logout */}
         <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-white/[0.08] shrink-0">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.08] border border-white/[0.08] text-white text-[11px] font-bold uppercase shrink-0">
-              {user?.name ? user.name.substring(0, 2) : "AD"}
+            <div
+              suppressHydrationWarning
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.08] border border-white/[0.08] text-white text-[11px] font-bold uppercase shrink-0"
+            >
+              {mounted && user?.name ? user.name.substring(0, 2) : "AD"}
             </div>
             <div className="hidden lg:block text-left">
-              <span className="text-xs font-medium text-white block leading-tight max-w-[110px] truncate">
-                {user?.name ?? "Quản trị viên"}
+              <span
+                suppressHydrationWarning
+                className="text-xs font-medium text-white block leading-tight max-w-[110px] truncate"
+              >
+                {mounted ? (user?.name ?? "Quản trị viên") : "Quản trị viên"}
               </span>
             </div>
           </div>

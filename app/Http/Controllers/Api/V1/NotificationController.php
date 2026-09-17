@@ -28,7 +28,7 @@ class NotificationController extends Controller
         });
 
         return response()->json([
-            'success' => true,
+            'status' => 'success',
             'data' => $formattedData,
             'meta' => [
                 'currentPage' => $paginator->currentPage(),
@@ -48,7 +48,7 @@ class NotificationController extends Controller
         $count = $this->notificationService->getUnreadCount($request->user());
 
         return response()->json([
-            'success' => true,
+            'status' => 'success',
             'data' => [
                 'unreadCount' => $count,
             ],
@@ -64,13 +64,13 @@ class NotificationController extends Controller
 
         if (! $success) {
             return response()->json([
-                'success' => false,
+                'status' => 'error',
                 'message' => 'Không tìm thấy thông báo hoặc bạn không có quyền truy cập.',
             ], 404);
         }
 
         return response()->json([
-            'success' => true,
+            'status' => 'success',
             'message' => 'Đã đánh dấu thông báo là đã đọc.',
             'data' => [
                 'unreadCount' => $this->notificationService->getUnreadCount($request->user()),
@@ -86,7 +86,7 @@ class NotificationController extends Controller
         $affected = $this->notificationService->markAllAsRead($request->user());
 
         return response()->json([
-            'success' => true,
+            'status' => 'success',
             'message' => "Đã đánh dấu tất cả {$affected} thông báo là đã đọc.",
             'data' => [
                 'unreadCount' => 0,
@@ -103,13 +103,13 @@ class NotificationController extends Controller
 
         if (! $success) {
             return response()->json([
-                'success' => false,
+                'status' => 'error',
                 'message' => 'Không tìm thấy thông báo hoặc bạn không có quyền truy cập.',
             ], 404);
         }
 
         return response()->json([
-            'success' => true,
+            'status' => 'success',
             'message' => 'Đã xóa thông báo thành công.',
         ]);
     }

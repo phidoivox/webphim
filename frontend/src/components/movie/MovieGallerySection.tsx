@@ -246,14 +246,14 @@ export default function MovieGallerySection({
             onClick={() => setSelectedImageIndex(null)}
             className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/95 backdrop-blur-md select-none animate-fade-in"
           >
-            {/* Nút đóng góc trên bên phải (Fixed Top Right) */}
+            {/* Nút đóng góc trên bên phải (Fixed Top Right with Safe Area) */}
             <button
               type="button"
               onClick={() => setSelectedImageIndex(null)}
-              className="fixed top-5 right-5 sm:top-6 sm:right-8 z-[100000] flex h-11 w-11 items-center justify-center rounded-full bg-black/70 border border-white/20 text-white hover:bg-white/20 transition-all cursor-pointer shadow-lg"
+              className="fixed top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-[100000] flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-black/75 border border-white/20 text-white hover:bg-white/20 transition-all cursor-pointer shadow-lg active:scale-95"
               aria-label="Đóng"
             >
-              <span className="text-xl font-bold">✕</span>
+              <span className="text-lg sm:text-xl font-bold leading-none">✕</span>
             </button>
 
             {/* Nút lùi (Prev) bên trái */}
@@ -266,23 +266,23 @@ export default function MovieGallerySection({
                     (selectedImageIndex - 1 + images.length) % images.length
                   );
                 }}
-                className="fixed left-3 sm:left-6 top-1/2 -translate-y-1/2 z-[100000] flex h-14 w-14 items-center justify-center text-white/70 hover:text-white transition-all cursor-pointer hover:scale-125"
+                className="fixed left-2 sm:left-6 top-1/2 -translate-y-1/2 z-[100000] flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-black/40 sm:bg-transparent text-white/70 hover:text-white transition-all cursor-pointer hover:scale-110 active:scale-90"
                 aria-label="Ảnh trước"
               >
-                <span className="text-4xl sm:text-5xl font-light">‹</span>
+                <span className="text-3xl sm:text-5xl font-light leading-none">‹</span>
               </button>
             )}
 
             {/* Ảnh trung tâm (Căn giữa hoàn hảo toàn màn hình) */}
             <div
               onClick={(e) => e.stopPropagation()}
-              className="relative max-h-[82vh] max-w-[88vw] flex items-center justify-center px-4"
+              className="relative max-h-[82vh] max-w-[92vw] sm:max-w-[85vw] flex items-center justify-center px-2 sm:px-4"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={images[selectedImageIndex].url}
                 alt={images[selectedImageIndex].caption || `${movieName} - Gallery`}
-                className="max-h-[80vh] max-w-[85vw] object-contain rounded-md shadow-2xl"
+                className="max-h-[80vh] max-w-[90vw] sm:max-w-[85vw] object-contain rounded-md shadow-2xl"
               />
             </div>
 
@@ -294,15 +294,15 @@ export default function MovieGallerySection({
                   e.stopPropagation();
                   setSelectedImageIndex((selectedImageIndex + 1) % images.length);
                 }}
-                className="fixed right-3 sm:right-6 top-1/2 -translate-y-1/2 z-[100000] flex h-14 w-14 items-center justify-center text-white/70 hover:text-white transition-all cursor-pointer hover:scale-125"
+                className="fixed right-2 sm:right-6 top-1/2 -translate-y-1/2 z-[100000] flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-black/40 sm:bg-transparent text-white/70 hover:text-white transition-all cursor-pointer hover:scale-110 active:scale-90"
                 aria-label="Ảnh tiếp"
               >
-                <span className="text-4xl sm:text-5xl font-light">›</span>
+                <span className="text-3xl sm:text-5xl font-light leading-none">›</span>
               </button>
             )}
 
             {/* Chỉ số ảnh ở dưới cùng (e.g. 1 / 2) */}
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100000] px-4 py-1 rounded-full bg-black/80 border border-white/15 text-xs font-semibold text-gray-300 tracking-widest shadow-lg">
+            <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[100000] px-4 py-1 rounded-full bg-black/80 border border-white/15 text-xs font-semibold text-gray-300 tracking-widest shadow-lg">
               {selectedImageIndex + 1} / {images.length}
             </div>
           </div>,

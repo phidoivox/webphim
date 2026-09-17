@@ -7,6 +7,7 @@ import {
   mergeGuestHistoryApi,
   syncHistoryApi,
 } from "@/lib/api";
+import { getApiUrl } from "@/lib/env";
 import type { GuestHistoryItem, HistorySyncPayload } from "@/types/history";
 
 const GUEST_HISTORY_KEY = "webphim_guest_history";
@@ -57,7 +58,29 @@ export function useVideoSession(config: VideoSessionConfig) {
   useEffect(() => {
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
     try {
-      broadcastRef.current = new BroadcastChannel("webphim_watch_sync");
+      const bc = new BroadcastChannel("webphim_watch_sync");
+      broadcastRef.current = bc;
+
+      bc.onmessage = (event) => {
+        if (event.data?.type === "PROGRESS_UPDATE") {
+          const { movieId, episodeId, progressSeconds, durationSeconds } = event.data;
+          const currentMeta = latestMetaRef.current;
+
+          // Nếu cùng movieId (và episodeId nếu có) và mốc thời gian từ tab khác lớn hơn
+          if (
+            movieId === currentMeta.movieId &&
+            (episodeId === undefined || episodeId === currentMeta.episodeId) &&
+            typeof progressSeconds === "number" &&
+            progressSeconds > currentMeta.currentTime
+          ) {
+            latestMetaRef.current.currentTime = progressSeconds;
+            if (durationSeconds) {
+              latestMetaRef.current.duration = durationSeconds;
+            }
+            lastSavedTimeRef.current = progressSeconds;
+          }
+        }
+      };
     } catch {
       // Ignore
     }
@@ -307,7 +330,12 @@ export function useVideoSession(config: VideoSessionConfig) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const handleExit = () => {
+    const handleExit = (e?: Event) => {
+      // Nếu là visibilitychange nhưng tab vẫn hiển thị (đang quay lại tab), không kích hoạt lưu
+      if (e?.type === "visibilitychange" && typeof document !== "undefined" && document.visibilityState !== "hidden") {
+        return;
+      }
+
       const meta = latestMetaRef.current;
       const time = Math.floor(meta.currentTime);
       const dur = Math.floor(meta.duration);
@@ -319,7 +347,7 @@ export function useVideoSession(config: VideoSessionConfig) {
 
       // Nếu có token, kích hoạt fetch keepalive
       if (token && isAuthenticated) {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://webphim.test/api";
+        const apiUrl = getApiUrl();
         try {
           fetch(`${apiUrl}/v1/history/sync`, {
             method: "POST",

@@ -50,9 +50,12 @@ export interface AdminDashboardData {
     id: number;
     name: string;
     slug: string;
-    thumb_url: string | null;
-    view_count: number;
-    rating_avg: string | number;
+    thumbUrl?: string | null;
+    thumb_url?: string | null;
+    viewCount?: number;
+    view_count?: number;
+    ratingAvg?: string | number;
+    rating_avg?: string | number;
   }>;
   activityLogs?: Array<{
     id: number;
@@ -168,6 +171,8 @@ export interface AdminTaxonomyGenre {
   name: string;
   slug: string;
   description?: string | null;
+  meta_title?: string | null;
+  meta_description?: string | null;
   movies_count?: number;
 }
 
@@ -176,6 +181,8 @@ export interface AdminTaxonomyCountry {
   name: string;
   slug: string;
   description?: string | null;
+  meta_title?: string | null;
+  meta_description?: string | null;
   movies_count?: number;
 }
 
@@ -184,7 +191,8 @@ export interface AdminTaxonomyPerson {
   name: string;
   slug?: string;
   avatar_url?: string | null;
-  bio?: string | null;
+  avatarUrl?: string | null;
+  biography?: string | null;
 }
 
 export interface AdminMovieDetail extends AdminMovieListItem {
@@ -194,7 +202,7 @@ export interface AdminMovieDetail extends AdminMovieListItem {
   ageRating?: string | null;
   lang?: string | null;
   notifySchedule?: string | null;
-  scheduleDayOfWeek?: number | null;
+  scheduleDays?: number[];
   episodes?: AdminEpisodeItem[];
   directors?: AdminTaxonomyPerson[];
   actors?: Array<AdminTaxonomyPerson & { characterName?: string; sortOrder?: number }>;

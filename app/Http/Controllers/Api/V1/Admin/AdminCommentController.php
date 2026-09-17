@@ -21,16 +21,7 @@ class AdminCommentController extends Controller
     {
         $paginator = $this->commentService->adminGetComments($request->all());
 
-        return response()->json([
-            'status' => 'success',
-            'data' => CommentResource::collection($paginator->items()),
-            'meta' => [
-                'currentPage' => $paginator->currentPage(),
-                'lastPage' => $paginator->lastPage(),
-                'perPage' => $paginator->perPage(),
-                'total' => $paginator->total(),
-            ],
-        ]);
+        return response()->paginated($paginator, CommentResource::class);
     }
 
     /**

@@ -22,13 +22,21 @@ export function getStoredToken(): string | null {
 }
 
 /**
- * Token nằm ở HttpOnly cookie do backend set — không persist ra JS storage nữa.
- * Giữ hàm để tương thích caller, không ghi gì thêm.
+ * Lưu token vào localStorage và Cookie
  */
 export function setStoredToken(token: string): void {
   if (typeof window === "undefined") return;
-  // Token nằm ở HttpOnly cookie do backend set — không persist ra JS storage nữa.
-  // Giữ hàm để tương thích caller, không ghi gì thêm.
+
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+
+    // Lưu cookie 30 ngày, SameSite=Lax, path=/
+    const maxAge = 30 * 24 * 60 * 60;
+    const isSecure = window.location.protocol === "https:";
+    document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=${maxAge}; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+  } catch {
+    // Silent catch on private browsing storage restrictions
+  }
 }
 
 /**

@@ -29,7 +29,7 @@ class BookmarkResource extends JsonResource
             'createdAt' => $bookmark->created_at?->toIso8601String(),
             'updatedAt' => $bookmark->updated_at?->toIso8601String(),
             'movie' => $this->whenLoaded('movie', function () use ($bookmark) {
-                return new MovieSummaryResource($bookmark->movie);
+                return $bookmark->movie ? new MovieSummaryResource($bookmark->movie) : null;
             }),
         ];
     }

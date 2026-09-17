@@ -1,0 +1,59 @@
+# Dependencies & build artifacts
+/vendor
+/node_modules
+/frontend/node_modules
+/frontend/.next
+/frontend/out
+/public/build
+/public/hot
+/public/storage
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Database
+database/*.sqlite
+database/schema
+
+# Logs & cache
+storage/logs/*
+storage/framework/views/*.php
+storage/framework/sessions/*
+storage/framework/cache/data/*
+
+# Dev tools & IDE
+.git
+.codegraph
+.claude
+.cursor
+.idea
+.vscode
+.zed
+.nova
+.phpactor.json
+.phpunit.result.cache
+.phpunit.cache
+_ide_helper.php
+Homestead.*
+Thumbs.db
+.DS_Store
+
+# Python artifacts (leftover)
+__pycache__
+*.pyc
+config/__pycache__
+
+# Test & CI
+tests
+phpunit.xml
+*.log
+.pnpm-debug.log*
+
+# Docker files (don't nest)
+Dockerfile*
+compose*.yaml
+compose*.yml
+docker-compose*

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useOptimistic, startTransition } from "react";
+import React, { useState } from "react";
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -47,31 +47,12 @@ export default function CommentItem({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // React 19 Optimistic state for Like
-  const [optimisticLike, setOptimisticLike] = useOptimistic(
-    {
-      isLiked: Boolean(comment.isLiked),
-      likesCount: Number(comment.likesCount || 0),
-    },
-    (state) => ({
-      isLiked: !state.isLiked,
-      likesCount: state.isLiked ? Math.max(0, state.likesCount - 1) : state.likesCount + 1,
-    })
-  );
-
   const isAuthor = user?.id === comment.author.id;
   const isAdmin = user?.role === "admin";
   const canModify = isAuthor || isAdmin;
 
   const handleLike = () => {
-    startTransition(async () => {
-      setOptimisticLike(null);
-      try {
-        await onLike(comment.id);
-      } catch {
-        // Handled in useComments / React automatically rolls back optimistic state on error
-      }
-    });
+    void onLike(comment.id);
   };
 
 
@@ -251,19 +232,19 @@ export default function CommentItem({
                 type="button"
                 onClick={handleLike}
                 className={`flex items-center gap-1.5 transition-all transform active:scale-90 cursor-pointer ${
-                  optimisticLike.isLiked
+                  comment.isLiked
                     ? "text-rose-500 font-bold"
                     : "text-slate-400 hover:text-rose-400"
                 }`}
-                title={optimisticLike.isLiked ? "Bỏ thích" : "Thích"}
+                title={comment.isLiked ? "Bỏ thích" : "Thích"}
               >
                 <HeartIcon
                   className={`h-4 w-4 transition-transform ${
-                    optimisticLike.isLiked ? "fill-rose-500 scale-110" : ""
+                    comment.isLiked ? "fill-rose-500 scale-110" : ""
                   }`}
                 />
                 <span className="tabular-nums">
-                  {optimisticLike.likesCount > 0 ? optimisticLike.likesCount : "Thích"}
+                  {comment.likesCount > 0 ? comment.likesCount : "Thích"}
                 </span>
               </button>
 

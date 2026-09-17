@@ -1,38 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import Link from "next/link";
 import Hls from "hls.js";
 import {
-  AspectRatioIcon,
-  CastIcon,
-  ChevronRightIcon,
-  GaugeIcon,
   ListVideoIcon,
   LockIcon,
-  MaximizeIcon,
   PauseIcon,
-  PipIcon,
   PlayIcon,
   RotateCcw10Icon,
-  RotateCw10Icon,
-  ServerIcon,
-  SettingsIcon,
-  SlidersIcon,
   UnlockIcon,
-  Volume2Icon,
-  VolumeXIcon,
   XIcon,
 } from "@/components/ui/icons";
 import type { MovieEpisode } from "@/types/movie";
 import { useVideoSession } from "@/hooks/useVideoSession";
-import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import PlayerControls from "./PlayerControls";
+import PlayerSettingsModal, { type MovieServerItem } from "./PlayerSettingsModal";
+import PlayerEpisodeDrawer from "./PlayerEpisodeDrawer";
 
-export interface MovieServerItem {
-  id: string | number;
-  name?: string;
-  serverName?: string;
-}
+export type { MovieServerItem };
 
 interface PlayerShellProps {
   src: string | null;
@@ -77,7 +63,6 @@ export default function PlayerShell({
 }: PlayerShellProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const wasPlayingRef = useRef(false);
@@ -92,10 +77,14 @@ export default function PlayerShell({
   const [videoError, setVideoError] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
-  const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const [hoverPos, setHoverPos] = useState<number>(0);
   const [flashState, setFlashState] = useState<{ type: "play" | "pause"; id: number } | null>(null);
   const flashTimerRef = useRef<number | null>(null);
+
+  // Time and Context Tracking Refs
+  const currentTimeRef = useRef<number>(0);
+  const prevSrcRef = useRef<string | null>(src);
+  const prevEpisodeSlugRef = useRef<string>(currentSlug);
+  const prevEpisodeIdRef = useRef<number | undefined>(episodeId);
 
   // Custom Settings Popover States
   const [activeMenu, setActiveMenu] = useState<"none" | "main" | "quality" | "speed" | "aspect" | "server">("none");
@@ -109,12 +98,10 @@ export default function PlayerShell({
   // Autoplay
   useEffect(() => {
     if (!autoPlay) return;
-    videoRef.current?.play().catch(() => {
-      // Trình duyệt có thể chặn autoplay nếu chưa có tương tác người dùng, không báo lỗi hỏng video
-    });
+    videoRef.current?.play().catch(() => {});
   }, [autoPlay]);
 
-  // =================== UNIFIED VIDEO SESSION (FSM & SYNC ENGINE) ===================
+  // =================== UNIFIED VIDEO SESSION ===================
   const {
     resolvedStartTime,
     resumeModal,
@@ -135,7 +122,9 @@ export default function PlayerShell({
 
   const targetSeekTimeRef = useRef<number>(resolvedStartTime);
   useEffect(() => {
-    targetSeekTimeRef.current = resolvedStartTime;
+    if (resolvedStartTime > 0 && currentTimeRef.current <= 0) {
+      targetSeekTimeRef.current = resolvedStartTime;
+    }
   }, [resolvedStartTime]);
 
   // Heartbeat đồng bộ Cloud định kỳ mỗi 5 giây khi video đang phát
@@ -154,13 +143,36 @@ export default function PlayerShell({
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      prevSrcRef.current = null;
       return;
     }
 
     const video = videoRef.current;
     if (!video) return;
 
-    wasPlayingRef.current = !video.paused;
+    // Kiểm tra nếu là đổi Server trong cùng 1 tập phim
+    const isSameEpisode =
+      (prevEpisodeSlugRef.current === currentSlug ||
+        (episodeId !== undefined && prevEpisodeIdRef.current === episodeId)) &&
+      Boolean(prevSrcRef.current && prevSrcRef.current !== src);
+
+    let startPos = 0;
+
+    if (isSameEpisode) {
+      // Giữ nguyên mốc thời gian đang xem dở trước khi đổi Server
+      const currentPos = video.currentTime > 0 ? video.currentTime : currentTimeRef.current;
+      startPos = currentPos > 0 ? currentPos : (resolvedStartTime > 0 ? resolvedStartTime : 0);
+      wasPlayingRef.current = !video.paused;
+    } else {
+      // Đổi tập mới hoặc nạp lần đầu: Sử dụng resolvedStartTime
+      startPos = resolvedStartTime > 0 ? resolvedStartTime : 0;
+      prevEpisodeSlugRef.current = currentSlug;
+      prevEpisodeIdRef.current = episodeId;
+      wasPlayingRef.current = autoPlay;
+    }
+
+    targetSeekTimeRef.current = startPos;
+    prevSrcRef.current = src;
 
     const restoreTime = () => {
       const t = targetSeekTimeRef.current;
@@ -170,13 +182,12 @@ export default function PlayerShell({
             if (Math.abs(video.currentTime - t) > 1.5) {
               video.currentTime = t;
               setCurrentTime(t);
+              currentTimeRef.current = t;
             }
-            targetSeekTimeRef.current = 0; // Mốc khôi phục chỉ chạy đúng 1 lần duy nhất lúc mở phim
+            targetSeekTimeRef.current = 0;
             unlockSession();
           }
-        } catch {
-          // Retry on next media event
-        }
+        } catch {}
       } else {
         unlockSession();
       }
@@ -188,14 +199,13 @@ export default function PlayerShell({
     }
 
     if (Hls.isSupported()) {
-      // Chuẩn Netflix & VOD: Cấu hình startPosition, tối ưu độ phân giải theo kích thước màn hình và đệm mượt mà
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
         capLevelToPlayerSize: true,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        startPosition: resolvedStartTime > 0 ? resolvedStartTime : -1,
+        startPosition: startPos > 0 ? startPos : -1,
       });
 
       hlsRef.current = hls;
@@ -231,14 +241,29 @@ export default function PlayerShell({
         }
       });
 
+      let recoverMediaCount = 0;
+      let recoverNetworkCount = 0;
+
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (recoverNetworkCount < 3) {
+                recoverNetworkCount++;
+                hls.startLoad();
+              } else {
+                hls.destroy();
+                setVideoError(true);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
+              if (recoverMediaCount < 3) {
+                recoverMediaCount++;
+                hls.recoverMediaError();
+              } else {
+                hls.destroy();
+                setVideoError(true);
+              }
               break;
             default:
               hls.destroy();
@@ -260,12 +285,13 @@ export default function PlayerShell({
         hlsRef.current = null;
       }
     };
-  }, [src, autoPlay]);
+  }, [src, autoPlay, currentSlug, episodeId, resolvedStartTime, unlockSession]);
 
-  // Clean timer
+  // Clean timers
   useEffect(() => {
     return () => {
       if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
     };
   }, []);
 
@@ -344,7 +370,7 @@ export default function PlayerShell({
     showControls();
   };
 
-  const skipTime = (seconds: number) => {
+  const skipTime = useCallback((seconds: number) => {
     if (isLocked) return;
     const video = videoRef.current;
     if (!video) return;
@@ -352,15 +378,15 @@ export default function PlayerShell({
     const newTime = Math.min(Math.max(video.currentTime + seconds, 0), duration);
     video.currentTime = newTime;
     setCurrentTime(newTime);
+    currentTimeRef.current = newTime;
     updateCurrentTime(newTime, duration);
     unlockSession();
     showControls();
-  };
+  }, [isLocked, duration, updateCurrentTime, unlockSession, showControls]);
 
-  // ── HTML5 SCREEN WAKE LOCK API (Chống tắt màn hình khi đang phát video) ──
+  // HTML5 Screen Wake Lock API
   useEffect(() => {
     if (typeof window === "undefined" || !("wakeLock" in navigator)) return;
-
     let wakeLockSentinel: { release: () => Promise<void> } | null = null;
 
     const requestWakeLock = async () => {
@@ -407,7 +433,7 @@ export default function PlayerShell({
     };
   }, [playing]);
 
-  // ── HTML5 MEDIA SESSION API (Đồng bộ màn hình khóa, phím media & tai nghe Bluetooth) ──
+  // HTML5 Media Session API
   useEffect(() => {
     if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
 
@@ -428,12 +454,10 @@ export default function PlayerShell({
 
     try {
       navigator.mediaSession.setActionHandler("play", () => {
-        videoRef.current?.play();
-        setPlaying(true);
+        togglePlay();
       });
       navigator.mediaSession.setActionHandler("pause", () => {
-        videoRef.current?.pause();
-        setPlaying(false);
+        togglePlay();
       });
       navigator.mediaSession.setActionHandler("seekbackward", (details) => {
         const skip = details.seekOffset || 10;
@@ -455,8 +479,7 @@ export default function PlayerShell({
         navigator.mediaSession.setActionHandler("seekforward", null);
       }
     };
-  }, [movieName, episodeName, title, posterUrl, duration]);
-
+  }, [movieName, episodeName, title, posterUrl, skipTime, togglePlay]);
 
   const toggleFullscreen = () => {
     const container = containerRef.current;
@@ -468,6 +491,78 @@ export default function PlayerShell({
     }
     showControls();
   };
+
+  // Keyboard Hotkeys: Space (Play/Pause), Left/Right (Seek), Up/Down (Volume), F (Fullscreen), M (Mute)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+
+      if (isLocked) return;
+
+      switch (e.key) {
+        case " ":
+        case "k":
+        case "K":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "ArrowLeft":
+        case "j":
+        case "J":
+          e.preventDefault();
+          skipTime(-10);
+          break;
+        case "ArrowRight":
+        case "l":
+        case "L":
+          e.preventDefault();
+          skipTime(10);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          if (videoRef.current) {
+            const newVol = Math.min(1, videoRef.current.volume + 0.1);
+            handleVolumeChange(newVol);
+          }
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          if (videoRef.current) {
+            const newVol = Math.max(0, videoRef.current.volume - 0.1);
+            handleVolumeChange(newVol);
+          }
+          break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          toggleMute();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isLocked, togglePlay, skipTime, handleVolumeChange, toggleMute]);
 
   const togglePip = async () => {
     const video = videoRef.current;
@@ -521,48 +616,13 @@ export default function PlayerShell({
     const newTime = Number(e.target.value);
     video.currentTime = newTime;
     setCurrentTime(newTime);
+    currentTimeRef.current = newTime;
     updateCurrentTime(newTime, duration);
     unlockSession();
     showControls();
   };
 
-  const handleTimelineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineRef.current || !duration) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const offsetX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const pct = (offsetX / rect.width) * 100;
-    const time = (offsetX / rect.width) * duration;
-    setHoverPos(pct);
-    setHoverTime(time);
-  };
-
-  const handleTimelineMouseLeave = () => {
-    setHoverTime(null);
-  };
-
-  const formatTime = (sec: number, matchDuration?: number) => {
-    const totalDuration = matchDuration ?? duration;
-    const showHours = totalDuration >= 3600;
-
-    if (!Number.isFinite(sec) || sec <= 0) {
-      return showHours ? "00:00:00" : "00:00";
-    }
-
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = Math.floor(sec % 60);
-
-    const paddedH = h.toString().padStart(2, "0");
-    const paddedM = m.toString().padStart(2, "0");
-    const paddedS = s.toString().padStart(2, "0");
-
-    if (h > 0 || showHours) {
-      return `${paddedH}:${paddedM}:${paddedS}`;
-    }
-    return `${paddedM}:${paddedS}`;
-  };
-
-  // Embed iframe fallback với sandbox bảo mật cao
+  // Embed iframe fallback
   if (!src && embedUrl) {
     return (
       <div className="relative aspect-video w-full bg-black">
@@ -579,11 +639,6 @@ export default function PlayerShell({
       </div>
     );
   }
-
-  const currentQualityLabel =
-    selectedQuality === -1
-      ? "Auto"
-      : qualities.find((q) => q.id === selectedQuality)?.label || "Auto";
 
   return (
     <div
@@ -634,6 +689,7 @@ export default function PlayerShell({
           onTimeUpdate={(e) => {
             const t = e.currentTarget.currentTime;
             setCurrentTime(t);
+            currentTimeRef.current = t;
             updateCurrentTime(t, duration);
           }}
           onLoadedMetadata={(e) => {
@@ -645,21 +701,26 @@ export default function PlayerShell({
                 if (Math.abs(e.currentTarget.currentTime - t) > 1.5) {
                   e.currentTarget.currentTime = t;
                   setCurrentTime(t);
+                  currentTimeRef.current = t;
                 }
                 targetSeekTimeRef.current = 0;
               } catch {}
             }
           }}
-          onCanPlay={(e) => {
+          onCanPlay={() => {
             const t = targetSeekTimeRef.current;
-            if (t > 0) {
+            if (t > 0 && videoRef.current) {
               try {
-                if (Math.abs(e.currentTarget.currentTime - t) > 1.5) {
-                  e.currentTarget.currentTime = t;
+                if (Math.abs(videoRef.current.currentTime - t) > 1.5) {
+                  videoRef.current.currentTime = t;
                   setCurrentTime(t);
+                  currentTimeRef.current = t;
                 }
                 targetSeekTimeRef.current = 0;
               } catch {}
+            }
+            if (wasPlayingRef.current || autoPlay) {
+              videoRef.current?.play().catch(() => {});
             }
             unlockSession();
           }}
@@ -726,6 +787,7 @@ export default function PlayerShell({
                 type="button"
                 onClick={() => {
                   targetSeekTimeRef.current = 0;
+                  currentTimeRef.current = 0;
                   if (videoRef.current) {
                     videoRef.current.currentTime = 0;
                     setCurrentTime(0);
@@ -760,6 +822,7 @@ export default function PlayerShell({
                 type="button"
                 onClick={() => {
                   targetSeekTimeRef.current = resumeModal.time;
+                  currentTimeRef.current = resumeModal.time;
                   if (videoRef.current) {
                     videoRef.current.currentTime = resumeModal.time;
                     setCurrentTime(resumeModal.time);
@@ -801,11 +864,12 @@ export default function PlayerShell({
         </div>
       )}
 
-      {/* LOCK SCREEN BUTTON (Middle-Left Edge) */}
+      {/* LOCK SCREEN BUTTON */}
       <div
-        className={`absolute left-5 top-1/2 -translate-y-1/2 z-30 transition-opacity duration-300 ${
+        className={cn(
+          "absolute left-5 top-1/2 -translate-y-1/2 z-30 transition-opacity duration-300",
           controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
+        )}
       >
         <button
           type="button"
@@ -814,23 +878,25 @@ export default function PlayerShell({
             setIsLocked((v) => !v);
             showControls();
           }}
-          className={`flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-md transition-all shadow-xl ${
+          className={cn(
+            "flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-md transition-all shadow-xl cursor-pointer",
             isLocked
               ? "bg-accent text-white scale-110"
               : "bg-black/40 text-white/80 hover:text-white hover:bg-black/70"
-          }`}
+          )}
           title={isLocked ? "Mở khóa màn hình" : "Khóa màn hình"}
         >
           {isLocked ? <LockIcon className="h-5.5 w-5.5" /> : <UnlockIcon className="h-5.5 w-5.5" />}
         </button>
       </div>
 
-      {/* CONTROLS OVERLAY (HIDDEN WHEN LOCKED OR INACTIVE) */}
+      {/* CONTROLS OVERLAY */}
       {!isLocked && (
         <div
-          className={`absolute inset-0 z-20 flex flex-col justify-between bg-gradient-to-t from-black/95 via-transparent to-black/70 p-4 sm:p-5 transition-opacity duration-300 ${
+          className={cn(
+            "absolute inset-0 z-20 flex flex-col justify-between bg-gradient-to-t from-black/95 via-transparent to-black/70 p-3.5 sm:p-5 pt-[max(0.875rem,env(safe-area-inset-top))] pb-[max(0.875rem,env(safe-area-inset-bottom))] pl-[max(0.875rem,env(safe-area-inset-left))] pr-[max(0.875rem,env(safe-area-inset-right))] transition-opacity duration-300",
             controlsVisible || showDrawer ? "opacity-100" : "pointer-events-none opacity-0"
-          }`}
+          )}
           onClick={handleVideoClick}
         >
           {/* TOP OVERLAY BAR */}
@@ -838,7 +904,6 @@ export default function PlayerShell({
             className="flex items-center justify-between text-sm text-white"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 1. Pure White Title */}
             <span
               className="font-display font-extrabold text-sm sm:text-base text-white truncate max-w-lg drop-shadow-md"
               style={{ color: "#ffffff" }}
@@ -846,7 +911,7 @@ export default function PlayerShell({
               {title}
             </span>
 
-            {/* 2. Top-Right Episode List Toggle Button */}
+            {/* Top-Right Episode List Toggle Button */}
             {episodes.length > 0 && (
               <button
                 type="button"
@@ -855,7 +920,7 @@ export default function PlayerShell({
                   setShowDrawer((v) => !v);
                   setActiveMenu("none");
                 }}
-                className="flex items-center gap-1.5 text-xs font-bold text-white hover:text-amber-400 transition-colors drop-shadow-sm"
+                className="flex items-center gap-1.5 text-xs font-bold text-white hover:text-amber-400 transition-colors drop-shadow-sm cursor-pointer"
                 style={{ color: "#ffffff" }}
               >
                 <ListVideoIcon className="h-4 w-4" style={{ color: "#ffffff" }} />
@@ -865,603 +930,60 @@ export default function PlayerShell({
           </div>
 
           {/* BOTTOM CONTROLS & TIMELINE BAR */}
-          <div
-            className="space-y-2.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Timeline Progress Bar */}
-            <div
-              ref={timelineRef}
-              onMouseMove={handleTimelineMouseMove}
-              onMouseLeave={handleTimelineMouseLeave}
-              onClick={(e) => e.stopPropagation()}
-              className="relative flex items-center group/slider cursor-pointer py-1"
-            >
-              {/* Hover/Scrub Time Tooltip Badge */}
-              {hoverTime !== null && (
-                <div
-                  className="absolute -top-8 z-30 -translate-x-1/2 rounded-md bg-black/90 px-2.5 py-0.5 text-xs font-bold text-white shadow-lg border border-white/15 pointer-events-none whitespace-nowrap"
-                  style={{ left: `${hoverPos}%` }}
-                >
-                  {formatTime(hoverTime, duration)}
-                </div>
-              )}
-
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={currentTime}
-                onChange={seek}
-                aria-label="Tua phim"
-                className="h-2 w-full cursor-pointer appearance-none rounded-lg focus:outline-none transition-all hover:h-2.5"
-                style={{
-                  background: `linear-gradient(to right, #ff5c1a 0%, #ff5c1a ${
-                    duration > 0 ? (currentTime / duration) * 100 : 0
-                  }%, rgba(255, 255, 255, 0.25) ${
-                    duration > 0 ? (currentTime / duration) * 100 : 0
-                  }%, rgba(255, 255, 255, 0.25) 100%)`,
-                }}
-              />
-            </div>
-
-            {/* Controls Button Row (Borderless Transparent Icons) */}
-            <div className="flex items-center justify-between text-white/90">
-              {/* Left Controls Group */}
-              <div className="flex items-center gap-2 sm:gap-3.5">
-                {/* Play / Pause */}
-                <button
-                  type="button"
-                  onClick={togglePlay}
-                  aria-label={playing ? "Tạm dừng" : "Phát"}
-                  className="text-white hover:text-accent transition-colors"
-                >
-                  {playing ? <PauseIcon className="h-7 w-7 sm:h-8 sm:w-8" /> : <PlayIcon className="h-7 w-7 sm:h-8 sm:w-8" />}
-                </button>
-
-                {/* Skip -10s */}
-                <button
-                  type="button"
-                  onClick={() => skipTime(-10)}
-                  title="Lùi 10 giây"
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  <RotateCcw10Icon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-
-                {/* Skip +10s */}
-                <button
-                  type="button"
-                  onClick={() => skipTime(10)}
-                  title="Tiến 10 giây"
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  <RotateCw10Icon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-
-                {/* Volume Control Group (Hover to expand slider bar) */}
-                <div className="group/volume flex items-center">
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    aria-label={muted || volume === 0 ? "Bật tiếng" : "Tắt tiếng"}
-                    className="text-white/80 hover:text-white transition-colors"
-                  >
-                    {muted || volume === 0 ? (
-                      <VolumeXIcon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                    ) : (
-                      <Volume2Icon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                    )}
-                  </button>
-
-                  {/* Smooth Expandable Slider on Hover */}
-                  <div className="w-0 group-hover/volume:w-20 sm:group-hover/volume:w-24 overflow-hidden transition-all duration-300 ease-out flex items-center pl-0 group-hover/volume:pl-2">
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={muted ? 0 : volume}
-                      onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      aria-label="Tăng giảm âm lượng"
-                      className="h-1.5 w-full cursor-pointer appearance-none rounded-lg focus:outline-none"
-                      style={{
-                        background: `linear-gradient(to right, #ff5c1a 0%, #ff5c1a ${
-                          (muted ? 0 : volume) * 100
-                        }%, rgba(255, 255, 255, 0.25) ${
-                          (muted ? 0 : volume) * 100
-                        }%, rgba(255, 255, 255, 0.25) 100%)`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Time Display */}
-                <span className="font-mono text-xs sm:text-sm font-bold tracking-wide text-white shrink-0 ml-1">
-                  {formatTime(currentTime, duration)} / {formatTime(duration, duration)}
-                </span>
-              </div>
-
-              {/* Right Controls Group */}
-              <div className="relative flex items-center gap-2 sm:gap-3.5">
-                {/* Server Quick Selector Button (Server Icon) */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveMenu((curr) => (curr === "server" ? "none" : "server"));
-                    setShowDrawer(false);
-                  }}
-                  title="Chọn Máy chủ phát"
-                  className={`transition-colors ${
-                    activeMenu === "server" ? "text-accent scale-110" : "text-white/80 hover:text-white"
-                  }`}
-                >
-                  <ServerIcon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-
-                {/* Screen Cast */}
-                <button
-                  type="button"
-                  onClick={() => toast.info("Tính năng truyền màn hình (Cast) đang sẵn sàng.")}
-                  title="Truyền màn hình (Cast)"
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  <CastIcon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-
-                {/* Picture in Picture */}
-                <button
-                  type="button"
-                  onClick={togglePip}
-                  title="Xem dạng cửa sổ thu nhỏ (PiP)"
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  <PipIcon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-
-                {/* Settings Gear Toggle Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveMenu((curr) => (curr === "main" ? "none" : "main"));
-                    setShowDrawer(false);
-                  }}
-                  title="Cài đặt phát video"
-                  className={`transition-transform ${
-                    ["main", "quality", "speed", "aspect"].includes(activeMenu)
-                      ? "text-accent rotate-45"
-                      : "text-white/80 hover:text-white"
-                  }`}
-                >
-                  <SettingsIcon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-
-                {/* Fullscreen Toggle */}
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  aria-label="Toàn màn hình"
-                  className="text-white/80 hover:text-white transition-colors"
-                >
-                  <MaximizeIcon className="h-5.5 w-5.5 sm:h-6 sm:w-6" />
-                </button>
-              </div>
-            </div>
-          </div>
+          <PlayerControls
+            playing={playing}
+            muted={muted}
+            volume={volume}
+            currentTime={currentTime}
+            duration={duration}
+            activeMenu={activeMenu}
+            onTogglePlay={togglePlay}
+            onSkipTime={skipTime}
+            onToggleMute={toggleMute}
+            onVolumeChange={handleVolumeChange}
+            onSeek={seek}
+            onTogglePip={togglePip}
+            onToggleFullscreen={toggleFullscreen}
+            onToggleSettings={() => {
+              setActiveMenu((curr) => (curr === "main" ? "none" : "main"));
+              setShowDrawer(false);
+            }}
+            onToggleServerMenu={() => {
+              setActiveMenu((curr) => (curr === "server" ? "none" : "server"));
+              setShowDrawer(false);
+            }}
+          />
         </div>
       )}
 
-      {/* EPISODE DRAWER OVERLAY (SLIDE-OVER PANEL ON THE RIGHT SIDE) */}
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`absolute right-0 top-0 bottom-0 z-40 w-72 sm:w-80 bg-[#121116]/75 border-l border-white/20 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col transition-transform duration-300 ease-in-out ${
-          showDrawer ? "translate-x-0" : "translate-x-full pointer-events-none"
-        }`}
-      >
-        {/* Drawer Header: Movie Name + Close Button */}
-        <div className="flex items-center justify-between border-b border-white/10 p-4 shrink-0">
-          <h3
-            className="font-display text-sm sm:text-base font-extrabold text-white truncate max-w-[200px]"
-            style={{ color: "#ffffff" }}
-          >
-            {movieName || title}
-          </h3>
-          <button
-            type="button"
-            onClick={() => setShowDrawer(false)}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-            title="Đóng danh sách tập"
-          >
-            <XIcon className="h-4 w-4" />
-          </button>
-        </div>
+      {/* EPISODE DRAWER OVERLAY */}
+      <PlayerEpisodeDrawer
+        showDrawer={showDrawer}
+        movieName={movieName}
+        title={title}
+        posterUrl={posterUrl}
+        episodes={episodes}
+        currentSlug={currentSlug}
+        baseHref={baseHref}
+        onClose={() => setShowDrawer(false)}
+      />
 
-        {/* Episode List Scroll Container */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 [scrollbar-width:thin]">
-          {episodes.map((ep) => {
-            const active = ep.slug === currentSlug;
-            return (
-              <Link
-                key={ep.id}
-                href={`${baseHref}/${ep.slug}`}
-                onClick={() => setShowDrawer(false)}
-                className={`group flex items-center gap-3 rounded-xl p-2 transition-all ${
-                  active ? "bg-white/10" : "hover:bg-white/5"
-                }`}
-              >
-                {/* Episode 16:9 Thumbnail Image */}
-                <div
-                  className={`relative w-24 sm:w-28 aspect-video rounded-lg overflow-hidden shrink-0 bg-surface border-2 transition-all ${
-                    active ? "border-amber-500 shadow-md shadow-amber-500/20" : "border-white/10 group-hover:border-white/30"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={posterUrl}
-                    alt={ep.name}
-                    className="h-full w-full object-cover"
-                  />
-                  {active && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <PlayIcon className="h-5 w-5 fill-amber-400 text-amber-400" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Episode Title */}
-                <div className="flex-1 min-w-0">
-                  <span
-                    className={`text-xs sm:text-sm font-bold truncate block ${
-                      active ? "text-amber-400" : "text-white/80 group-hover:text-white"
-                    }`}
-                  >
-                    {ep.name.startsWith("Tập") ? ep.name : `Tập ${ep.name}`}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* CUSTOM SETTINGS MENU POPOVER (BOTTOM-RIGHT POPUP) */}
-      {activeMenu !== "none" && (
-        <div
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-16 right-4 sm:right-6 z-40 w-64 sm:w-72 rounded-[22px] border border-white/20 bg-[#121116]/70 p-4 text-xs sm:text-sm text-white shadow-[0_20px_50px_rgba(0,0,0,0.7)] backdrop-blur-2xl backdrop-saturate-150 transition-all duration-200 ease-out animate-rise"
-        >
-          {/* Main Settings Menu (Matching Screenshot 1) */}
-          {activeMenu === "main" && (
-            <div className="space-y-1.5">
-              <h4 className="font-extrabold text-white text-base mb-3 px-1">
-                Cài đặt
-              </h4>
-
-              {/* Quality Item */}
-              <button
-                type="button"
-                onClick={() => setActiveMenu("quality")}
-                className="flex w-full items-center justify-between rounded-xl px-2 py-2 hover:bg-white/5 transition-colors group"
-              >
-                <div className="flex items-center gap-2.5 font-bold text-white">
-                  <SlidersIcon className="h-4 w-4 text-white/80 group-hover:text-white" />
-                  <span>Chất lượng</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-white/60 font-medium text-xs">
-                  <span>{currentQualityLabel}</span>
-                  <ChevronRightIcon className="h-4 w-4 text-white/40" />
-                </div>
-              </button>
-
-              {/* Speed Item */}
-              <button
-                type="button"
-                onClick={() => setActiveMenu("speed")}
-                className="flex w-full items-center justify-between rounded-xl px-2 py-2 hover:bg-white/5 transition-colors group"
-              >
-                <div className="flex items-center gap-2.5 font-bold text-white">
-                  <GaugeIcon className="h-4 w-4 text-white/80 group-hover:text-white" />
-                  <span>Tốc độ</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-white/60 font-medium text-xs">
-                  <span>{playbackSpeed}x</span>
-                  <ChevronRightIcon className="h-4 w-4 text-white/40" />
-                </div>
-              </button>
-
-              {/* Aspect Ratio Item */}
-              <button
-                type="button"
-                onClick={() => setActiveMenu("aspect")}
-                className="flex w-full items-center justify-between rounded-xl px-2 py-2 hover:bg-white/5 transition-colors group"
-              >
-                <div className="flex items-center gap-2.5 font-bold text-white">
-                  <AspectRatioIcon className="h-4 w-4 text-white/80 group-hover:text-white" />
-                  <span>Tỉ lệ màn hình</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-white/60 font-medium text-xs">
-                  <span className="truncate max-w-[85px]">
-                    {aspectMode === "contain"
-                      ? "Vừa màn..."
-                      : aspectMode === "cover"
-                      ? "Tràn màn..."
-                      : "Tỉ lệ 16:9"}
-                  </span>
-                  <ChevronRightIcon className="h-4 w-4 text-white/40" />
-                </div>
-              </button>
-            </div>
-          )}
-
-          {/* Sub-menu: Quality Selection (Matching Screenshot 2) */}
-          {activeMenu === "quality" && (
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setActiveMenu("main")}
-                className="flex items-center gap-2 text-sm font-bold text-white pb-2.5 border-b border-white/10 w-full text-left"
-              >
-                <ChevronRightIcon className="h-4 w-4 rotate-180 text-white/70" />
-                <span>Chất lượng</span>
-              </button>
-
-              <div className="space-y-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => changeQuality(-1)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs sm:text-sm transition-colors ${
-                    selectedQuality === -1 ? "font-bold text-white" : "font-medium text-white/70 hover:text-white"
-                  }`}
-                >
-                  {selectedQuality === -1 ? (
-                    <span className="h-2 w-2 rounded-full bg-white shrink-0" />
-                  ) : (
-                    <span className="w-2" />
-                  )}
-                  <span>Auto</span>
-                </button>
-                {qualities.map((q) => {
-                  const isSelected = selectedQuality === q.id;
-                  return (
-                    <button
-                      key={q.id}
-                      type="button"
-                      onClick={() => changeQuality(q.id)}
-                      className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs sm:text-sm transition-colors ${
-                        isSelected ? "font-bold text-white" : "font-medium text-white/70 hover:text-white"
-                      }`}
-                    >
-                      {isSelected ? (
-                        <span className="h-2 w-2 rounded-full bg-white shrink-0" />
-                      ) : (
-                        <span className="w-2" />
-                      )}
-                      <span>{q.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Sub-menu: Speed Selection (Matching Screenshot 3) */}
-          {activeMenu === "speed" && (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setActiveMenu("main")}
-                className="flex items-center gap-2 text-sm font-bold text-white pb-2.5 border-b border-white/10 w-full text-left"
-              >
-                <ChevronRightIcon className="h-4 w-4 rotate-180 text-white/70" />
-                <span>Tốc độ phát</span>
-              </button>
-
-              {/* Big bold speed display */}
-              <div className="text-center font-extrabold text-2xl sm:text-3xl text-white tracking-tight py-1">
-                {playbackSpeed.toFixed(2)}x
-              </div>
-
-              {/* Slider with minus and plus buttons */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => changeSpeed(Math.max(0.25, Number((playbackSpeed - 0.25).toFixed(2))))}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#323136] hover:bg-[#3e3d43] text-white font-bold text-base transition-colors shrink-0"
-                >
-                  -
-                </button>
-                <input
-                  type="range"
-                  min={0.25}
-                  max={2.0}
-                  step={0.05}
-                  value={playbackSpeed}
-                  onChange={(e) => changeSpeed(Number(e.target.value))}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  aria-label="Tốc độ phát video"
-                  className="h-1.5 flex-1 cursor-pointer appearance-none rounded-lg focus:outline-none"
-                  style={{
-                    background: `linear-gradient(to right, #ffffff 0%, #ffffff ${
-                      ((playbackSpeed - 0.25) / (2.0 - 0.25)) * 100
-                    }%, rgba(255, 255, 255, 0.2) ${
-                      ((playbackSpeed - 0.25) / (2.0 - 0.25)) * 100
-                    }%, rgba(255, 255, 255, 0.2) 100%)`,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => changeSpeed(Math.min(2.0, Number((playbackSpeed + 0.25).toFixed(2))))}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#323136] hover:bg-[#3e3d43] text-white font-bold text-base transition-colors shrink-0"
-                >
-                  +
-                </button>
-              </div>
-
-              {/* Quick preset pill buttons */}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                {[1.0, 1.25, 1.5, 2.0].map((s) => {
-                  const isActive = Math.abs(playbackSpeed - s) < 0.01;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => changeSpeed(s)}
-                      className={`flex-1 rounded-[14px] py-2 text-xs transition-all ${
-                        isActive
-                          ? "bg-[#3a393e] text-white font-bold shadow-md"
-                          : "bg-[#252428] text-white/70 hover:text-white font-semibold"
-                      }`}
-                    >
-                      {s.toFixed(1)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Sub-menu: Aspect Ratio Selection (Matching Screenshot 4) */}
-          {activeMenu === "aspect" && (
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setActiveMenu("main")}
-                className="flex items-center gap-2 text-sm font-bold text-white pb-2.5 border-b border-white/10 w-full text-left"
-              >
-                <ChevronRightIcon className="h-4 w-4 rotate-180 text-white/70" />
-                <span>Tỉ lệ màn hình</span>
-              </button>
-
-              <div className="space-y-3 pt-1">
-                {/* Contain */}
-                <button
-                  type="button"
-                  onClick={() => changeAspect("contain")}
-                  className="w-full text-left transition-colors group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    {aspectMode === "contain" ? (
-                      <span className="h-2 w-2 rounded-full bg-white shrink-0" />
-                    ) : (
-                      <span className="w-2" />
-                    )}
-                    <span className="text-sm font-bold text-white">
-                      Vừa màn hình
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/50 pl-4.5 mt-0.5">
-                    Giữ nguyên tỉ lệ phim
-                  </p>
-                </button>
-
-                {/* Cover */}
-                <button
-                  type="button"
-                  onClick={() => changeAspect("cover")}
-                  className="w-full text-left transition-colors group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    {aspectMode === "cover" ? (
-                      <span className="h-2 w-2 rounded-full bg-white shrink-0" />
-                    ) : (
-                      <span className="w-2" />
-                    )}
-                    <span className="text-sm font-bold text-white">
-                      Lấp đầy
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/50 pl-4.5 mt-0.5">
-                    Cắt bớt viền để phủ màn hình
-                  </p>
-                </button>
-
-                {/* Fill / Stretch */}
-                <button
-                  type="button"
-                  onClick={() => changeAspect("fill")}
-                  className="w-full text-left transition-colors group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    {aspectMode === "fill" ? (
-                      <span className="h-2 w-2 rounded-full bg-white shrink-0" />
-                    ) : (
-                      <span className="w-2" />
-                    )}
-                    <span className="text-sm font-bold text-white">
-                      Kéo giãn
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/50 pl-4.5 mt-0.5">
-                    Ép theo tỉ lệ màn hình
-                  </p>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Sub-menu: Server Selection (Clean Minimalist List) */}
-          {activeMenu === "server" && (
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between pb-2.5 border-b border-white/10">
-                <h4
-                  className="font-extrabold text-white text-sm sm:text-base drop-shadow-sm"
-                  style={{ color: "#ffffff" }}
-                >
-                  Chọn Máy chủ
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setActiveMenu("none")}
-                  className="text-white/60 hover:text-white transition-colors"
-                >
-                  <XIcon className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="space-y-1 pt-1 max-h-52 overflow-y-auto [scrollbar-width:thin]">
-                {servers.map((srv, idx) => {
-                  const isSelected = String(selectedServerId) === String(srv.id);
-                  const serverTitle = srv.serverName || srv.name || `Server #${idx + 1}`;
-                  return (
-                    <button
-                      key={srv.id || idx}
-                      type="button"
-                      onClick={() => {
-                        onSelectServer?.(String(srv.id));
-                        setActiveMenu("none");
-                      }}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs sm:text-sm transition-colors ${
-                        isSelected
-                          ? "bg-white/10 font-bold text-white"
-                          : "font-medium text-white/70 hover:text-white hover:bg-white/5"
-                      }`}
-                    >
-                      <span style={{ color: isSelected ? "#ffffff" : "rgba(255,255,255,0.85)" }}>
-                        {serverTitle}
-                      </span>
-                      {isSelected && (
-                        <span className="text-[11px] font-bold text-accent">
-                          Đang phát
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* CUSTOM SETTINGS MENU POPOVER */}
+      <PlayerSettingsModal
+        activeMenu={activeMenu}
+        qualities={qualities}
+        selectedQuality={selectedQuality}
+        playbackSpeed={playbackSpeed}
+        aspectMode={aspectMode}
+        servers={servers}
+        selectedServerId={selectedServerId}
+        onClose={() => setActiveMenu("none")}
+        onSetMenu={setActiveMenu}
+        onChangeQuality={changeQuality}
+        onChangeSpeed={changeSpeed}
+        onChangeAspect={changeAspect}
+        onSelectServer={onSelectServer}
+      />
     </div>
   );
 }
-
-

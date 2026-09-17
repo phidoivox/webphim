@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useOptimistic, startTransition } from "react";
+import { useState, useRef, memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { MovieSummary } from "@/types/movie";
@@ -13,17 +13,11 @@ interface MovieCardProps {
   className?: string;
 }
 
-export default function MovieCard({ movie, className = "w-full" }: MovieCardProps) {
+function MovieCardComponent({ movie, className = "w-full" }: MovieCardProps) {
   const isSeries = movie.type === "series" || movie.type === "tv-show";
   const [isHovered, setIsHovered] = useState(false);
   const [popoverSide, setPopoverSide] = useState<"left" | "right">("right");
-  const { isFavorite: baseFavorite, toggleBookmark } = useBookmark(movie.id);
-
-  // React 19 Optimistic state for 0ms favorite feedback
-  const [optimisticFavorite, setOptimisticFavorite] = useOptimistic(
-    Boolean(baseFavorite),
-    (current) => !current
-  );
+  const { isFavorite, toggleBookmark } = useBookmark(movie.id);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -31,27 +25,33 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
   const toggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    startTransition(async () => {
-      setOptimisticFavorite(null);
-      await toggleBookmark(
-        {
-          id: movie.id,
-          name: movie.name,
-          originName: movie.originName,
-          slug: movie.slug,
-          posterUrl: movie.posterUrl,
-          thumbUrl: movie.thumbUrl,
-          year: movie.year,
-          quality: typeof movie.quality === "string" ? movie.quality : undefined,
-          ratingAvg: movie.ratingAvg,
-          genres: movie.genres,
-        },
-        "favorite"
-      );
-    });
+    void toggleBookmark(
+      {
+        id: movie.id,
+        name: movie.name,
+        originName: movie.originName,
+        slug: movie.slug,
+        posterUrl: movie.posterUrl,
+        thumbUrl: movie.thumbUrl,
+        year: movie.year,
+        quality: typeof movie.quality === "string" ? movie.quality : undefined,
+        ratingAvg: movie.ratingAvg,
+        genres: movie.genres,
+      },
+      "favorite"
+    );
   };
 
   const handleMouseEnter = () => {
+    // Chỉ kích hoạt popover preview khi dùng chuột máy tính (pointer fine), bỏ qua trên màn hình cảm ứng
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      !window.matchMedia("(hover: hover) and (pointer: fine)").matches
+    ) {
+      return;
+    }
+
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => {
       if (containerRef.current) {
@@ -186,7 +186,7 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
             {/* 3 Nút thao tác: Xem ngay, Thích, Chi tiết */}
             <div className="grid grid-cols-[1.2fr_1fr_1fr] gap-1.5 pt-0.5">
               <Link
-                href={`/xem/${movie.slug}/tap-1`}
+                href={`/xem/${movie.slug}`}
                 className="flex items-center justify-center gap-1 rounded-lg bg-amber-400 hover:bg-amber-300 px-2 py-1.5 text-xs font-bold text-black shadow transition"
               >
                 <PlayIcon className="h-3 w-3 fill-black" />
@@ -196,13 +196,13 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
                 type="button"
                 onClick={toggleFavorite}
                 className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold border transition cursor-pointer ${
-                  optimisticFavorite
+                  isFavorite
                     ? "bg-rose-500/20 border-rose-500/60 text-rose-400"
                     : "bg-white/10 hover:bg-white/15 border-white/10 text-white"
                 }`}
               >
-                <HeartIcon className={`h-3 w-3 ${optimisticFavorite ? "fill-rose-500 text-rose-500" : "text-white"}`} />
-                <span>{optimisticFavorite ? "Đã thích" : "Thích"}</span>
+                <HeartIcon className={`h-3 w-3 ${isFavorite ? "fill-rose-500 text-rose-500" : "text-white"}`} />
+                <span>{isFavorite ? "Đã thích" : "Thích"}</span>
               </button>
               <Link
                 href={`/phim/${movie.slug}`}
@@ -259,3 +259,6 @@ export default function MovieCard({ movie, className = "w-full" }: MovieCardProp
     </div>
   );
 }
+
+const MovieCard = memo(MovieCardComponent);
+export default MovieCard;

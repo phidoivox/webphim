@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { COUNTRIES } from "@/data/countries";
 import { GENRES } from "@/data/genres";
 import { SearchIcon } from "@/components/ui/icons";
+import { useFilterQuery } from "@/hooks/useFilterQuery";
+import { cn } from "@/lib/utils";
 
 interface AdvancedFilterPanelProps {
   isOpen?: boolean;
@@ -19,8 +19,7 @@ const TYPE_OPTIONS = [
   { label: "Tất cả", value: "" },
   { label: "Phim lẻ", value: "single" },
   { label: "Phim bộ", value: "series" },
-  { label: "TV Shows", value: "tv-shows" },
-  { label: "Hoạt hình", value: "hoat-hinh" },
+  { label: "TV Shows", value: "tv-show" },
 ];
 
 const LANG_OPTIONS = [
@@ -47,74 +46,52 @@ export default function AdvancedFilterPanel({
   initialGenre,
   initialCountry,
 }: AdvancedFilterPanelProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-
-  const [selectedCountry, setSelectedCountry] = useState(
-    () => searchParams?.get("country") || initialCountry || ""
-  );
-  const [selectedType, setSelectedType] = useState(
-    () => searchParams?.get("type") || initialType || ""
-  );
-  const [selectedGenre, setSelectedGenre] = useState(
-    () => searchParams?.get("genre") || initialGenre || ""
-  );
-  const [selectedLang, setSelectedLang] = useState(() => searchParams?.get("lang") || "");
-  const [selectedYear, setSelectedYear] = useState(() => searchParams?.get("year") || "");
-  const [customYear, setCustomYear] = useState("");
-  const [selectedSort, setSelectedSort] = useState(() => searchParams?.get("sort") || "latest");
+  const { searchParams, isPending, updateParam } = useFilterQuery();
 
   if (!isOpen) return null;
 
-  const handleApplyFilter = () => {
-    const params = new URLSearchParams();
-    const currentQ = keyword || searchParams?.get("q") || "";
-    if (currentQ) params.set("q", currentQ);
+  // ✨ DERIVED STATE: Trạng thái đọc trực tiếp 100% từ URL (Single Source of Truth)
+  const activeCountry = searchParams?.get("country") || initialCountry || "";
+  const rawType = searchParams?.get("type") || initialType || "";
+  const activeType = rawType === "tv-shows" ? "tv-show" : rawType;
+  const activeGenre = searchParams?.get("genre") || initialGenre || "";
+  const activeLang = searchParams?.get("lang") || "";
+  const activeYear = searchParams?.get("year") || "";
+  const activeSort = searchParams?.get("sort") || "latest";
 
-    if (selectedCountry) params.set("country", selectedCountry);
-    if (selectedType) params.set("type", selectedType);
-    if (selectedGenre) params.set("genre", selectedGenre);
-    if (selectedLang) params.set("lang", selectedLang);
-
-    const activeYear = customYear.trim() || selectedYear;
-    if (activeYear) params.set("year", activeYear);
-
-    if (selectedSort && selectedSort !== "latest") params.set("sort", selectedSort);
-
-    // Target route
-    const targetUrl = `/tim-kiem?${params.toString()}`;
-
-    startTransition(() => {
-      router.push(targetUrl);
-    });
+  const handleUpdateFilter = (key: string, value: string) => {
+    if (keyword && !searchParams?.get("q")) {
+      updateParam("q", keyword);
+    }
+    updateParam(key, value);
   };
 
   const isCustomYearActive =
-    customYear.trim() !== "" ||
-    (selectedYear !== "" && !YEAR_OPTIONS.includes(selectedYear));
+    activeYear !== "" && !YEAR_OPTIONS.includes(activeYear);
 
   return (
     <div
-      className={`relative mb-8 rounded-2xl border border-white/10 bg-[#0e0f14]/95 p-4 sm:p-6 shadow-2xl backdrop-blur-xl transition-all duration-300 ${
-        isPending ? "opacity-60" : "opacity-100"
-      }`}
+      className={cn(
+        "relative mb-6 sm:mb-8 rounded-2xl border border-white/10 bg-[#0e0f14]/95 p-3.5 sm:p-6 shadow-2xl backdrop-blur-xl transition-all duration-300",
+        isPending && "opacity-60 pointer-events-none"
+      )}
     >
-      <div className="space-y-3.5">
+      <div className="space-y-3 sm:space-y-3.5">
         {/* Hàng 1: Quốc gia */}
-        <div className="flex flex-col border-b border-white/10 border-dashed pb-3.5 sm:flex-row sm:items-start">
-          <span className="mb-2 w-28 shrink-0 text-xs font-semibold text-white/80 sm:mb-0 sm:pt-1 sm:text-sm">
+        <div className="flex flex-col border-b border-white/10 border-dashed pb-3 sm:pb-3.5 sm:flex-row sm:items-start">
+          <span className="mb-1.5 w-28 shrink-0 text-xs font-bold text-white/80 sm:mb-0 sm:pt-1 sm:text-sm">
             Quốc gia:
           </span>
           <div className="flex flex-1 flex-wrap items-center gap-1 sm:gap-1.5">
             <button
               type="button"
-              onClick={() => setSelectedCountry("")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                selectedCountry === ""
+              onClick={() => handleUpdateFilter("country", "")}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-xs font-medium transition active:scale-95 sm:px-3 sm:text-sm cursor-pointer",
+                activeCountry === ""
                   ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                   : "text-white/65 hover:bg-white/5 hover:text-white"
-              }`}
+              )}
             >
               Tất cả
             </button>
@@ -122,12 +99,13 @@ export default function AdvancedFilterPanel({
               <button
                 key={c.slug}
                 type="button"
-                onClick={() => setSelectedCountry(c.slug)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  selectedCountry === c.slug
+                onClick={() => handleUpdateFilter("country", c.slug)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition active:scale-95 sm:px-3 sm:text-sm cursor-pointer",
+                  activeCountry === c.slug
                     ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                     : "text-white/65 hover:bg-white/5 hover:text-white"
-                }`}
+                )}
               >
                 {c.label}
               </button>
@@ -136,8 +114,8 @@ export default function AdvancedFilterPanel({
         </div>
 
         {/* Hàng 2: Loại phim */}
-        <div className="flex flex-col border-b border-white/10 border-dashed pb-3.5 sm:flex-row sm:items-start">
-          <span className="mb-2 w-28 shrink-0 text-xs font-semibold text-white/80 sm:mb-0 sm:pt-1 sm:text-sm">
+        <div className="flex flex-col border-b border-white/10 border-dashed pb-3 sm:pb-3.5 sm:flex-row sm:items-start">
+          <span className="mb-1.5 w-28 shrink-0 text-xs font-bold text-white/80 sm:mb-0 sm:pt-1 sm:text-sm">
             Loại phim:
           </span>
           <div className="flex flex-1 flex-wrap items-center gap-1 sm:gap-1.5">
@@ -145,12 +123,13 @@ export default function AdvancedFilterPanel({
               <button
                 key={t.value}
                 type="button"
-                onClick={() => setSelectedType(t.value)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  selectedType === t.value
+                onClick={() => handleUpdateFilter("type", t.value)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition active:scale-95 sm:px-3 sm:text-sm cursor-pointer",
+                  activeType === t.value
                     ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                     : "text-white/65 hover:bg-white/5 hover:text-white"
-                }`}
+                )}
               >
                 {t.label}
               </button>
@@ -166,12 +145,13 @@ export default function AdvancedFilterPanel({
           <div className="flex flex-1 flex-wrap items-center gap-1 sm:gap-1.5">
             <button
               type="button"
-              onClick={() => setSelectedGenre("")}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                selectedGenre === ""
+              onClick={() => handleUpdateFilter("genre", "")}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm",
+                activeGenre === ""
                   ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                   : "text-white/65 hover:bg-white/5 hover:text-white"
-              }`}
+              )}
             >
               Tất cả
             </button>
@@ -179,12 +159,13 @@ export default function AdvancedFilterPanel({
               <button
                 key={g.slug}
                 type="button"
-                onClick={() => setSelectedGenre(g.slug)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  selectedGenre === g.slug
+                onClick={() => handleUpdateFilter("genre", g.slug)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm",
+                  activeGenre === g.slug
                     ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                     : "text-white/65 hover:bg-white/5 hover:text-white"
-                }`}
+                )}
               >
                 {g.label}
               </button>
@@ -202,12 +183,13 @@ export default function AdvancedFilterPanel({
               <button
                 key={l.value}
                 type="button"
-                onClick={() => setSelectedLang(l.value)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  selectedLang === l.value
+                onClick={() => handleUpdateFilter("lang", l.value)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm",
+                  activeLang === l.value
                     ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                     : "text-white/65 hover:bg-white/5 hover:text-white"
-                }`}
+                )}
               >
                 {l.label}
               </button>
@@ -225,15 +207,13 @@ export default function AdvancedFilterPanel({
               <button
                 key={yr || "all"}
                 type="button"
-                onClick={() => {
-                  setSelectedYear(yr);
-                  setCustomYear("");
-                }}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  selectedYear === yr && !customYear
+                onClick={() => handleUpdateFilter("year", yr)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm",
+                  activeYear === yr
                     ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                     : "text-white/65 hover:bg-white/5 hover:text-white"
-                }`}
+                )}
               >
                 {yr ? yr : "Tất cả"}
               </button>
@@ -245,17 +225,15 @@ export default function AdvancedFilterPanel({
                 type="number"
                 min="1970"
                 max="2030"
-                value={customYear}
-                onChange={(e) => {
-                  setCustomYear(e.target.value);
-                  setSelectedYear("");
-                }}
+                value={isCustomYearActive ? activeYear : ""}
+                onChange={(e) => handleUpdateFilter("year", e.target.value)}
                 placeholder="Nhập năm"
-                className={`h-7 w-24 rounded-full border pl-7 pr-2 text-xs transition placeholder:text-white/30 focus:outline-none sm:h-8 sm:w-28 sm:text-xs ${
+                className={cn(
+                  "h-7 w-24 rounded-full border pl-7 pr-2 text-xs transition placeholder:text-white/30 focus:outline-none sm:h-8 sm:w-28 sm:text-xs",
                   isCustomYearActive
                     ? "border-amber-400 bg-amber-400/10 text-amber-300"
                     : "border-white/10 bg-neutral-800/80 text-white focus:border-amber-400"
-                }`}
+                )}
               />
             </div>
           </div>
@@ -271,12 +249,13 @@ export default function AdvancedFilterPanel({
               <button
                 key={s.value}
                 type="button"
-                onClick={() => setSelectedSort(s.value)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm ${
-                  selectedSort === s.value
+                onClick={() => handleUpdateFilter("sort", s.value === "latest" ? "" : s.value)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition sm:px-3 sm:text-sm",
+                  activeSort === s.value
                     ? "border border-amber-400/80 bg-amber-400/15 font-semibold text-amber-300 shadow-sm"
                     : "text-white/65 hover:bg-white/5 hover:text-white"
-                }`}
+                )}
               >
                 {s.label}
               </button>
@@ -284,25 +263,18 @@ export default function AdvancedFilterPanel({
           </div>
         </div>
 
-        {/* Nút hành động */}
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="button"
-            onClick={handleApplyFilter}
-            className="flex items-center gap-1.5 rounded-full bg-amber-400 px-6 py-2.5 text-xs font-bold text-black shadow-lg shadow-amber-400/20 transition hover:bg-amber-300 sm:text-sm"
-          >
-            Lọc kết quả &rarr;
-          </button>
-          {onClose && (
+        {/* Nút đóng */}
+        {onClose && (
+          <div className="flex items-center gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full bg-neutral-800 px-6 py-2.5 text-xs font-semibold text-white/80 transition hover:bg-neutral-700 hover:text-white sm:text-sm"
+              className="rounded-full bg-neutral-800 px-6 py-2 text-xs font-semibold text-white/80 transition hover:bg-neutral-700 hover:text-white sm:text-sm"
             >
-              Đóng
+              Đóng bộ lọc
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

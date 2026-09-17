@@ -15,6 +15,13 @@
   --color-accent: #ff5c1a;
   --color-accent-hover: #ff7a3d;
   --color-accent-strong: #e04a0f;
+
+  /* Tailwind CSS v4 Animation Tokens */
+  --animate-rise: rise-in 0.5s ease-out both;
+  --animate-slide-right: slide-right-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-player-ripple: player-action-ripple 0.55s cubic-bezier(0, 0, 0.2, 1) forwards;
+  --animate-shimmer: shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  --animate-shimmer-fast: shimmer 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @theme inline {
@@ -30,16 +37,52 @@ html {
   background: var(--color-base);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   background: var(--color-base);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  overflow-x: clip;
+  min-height: 100dvh;
 }
 
 h1, h2, h3, h4, h5, h6 {
   color: inherit;
+}
+
+/* ── TOUCH TARGETS & MANIPULATION (Eliminate 300ms delay & accidental double-tap zoom) ── */
+button, a, input, select, textarea, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* ── TAILWIND V4 @utility DIRECTIVES (Hỗ trợ đầy đủ responsive & variant modifiers) ── */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+@utility mt-safe {
+  margin-top: env(safe-area-inset-top, 0px);
+}
+@utility mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* ── GLOBAL CUSTOM SCROLLBAR (Chuẩn WebKit / Blink / Chromium / Safari) ── */
@@ -71,17 +114,6 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ── SCROLLBAR UTILITIES ── */
-.no-scrollbar::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-}
-
-.no-scrollbar {
-  -ms-overflow-style: none !important;
-  scrollbar-width: none !important;
-}
-
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
@@ -133,10 +165,6 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-.animate-rise {
-  animation: rise-in 0.5s ease-out both;
-}
-
 /* Hero: chữ chạy từ bên phải sang */
 @keyframes slide-right-in {
   from {
@@ -148,10 +176,6 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 1;
     transform: translateX(0);
   }
-}
-
-.animate-slide-right {
-  animation: slide-right-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Player Center Play/Pause Action Ripple Animation */
@@ -208,7 +232,7 @@ input[type="range"]::-moz-range-thumb:hover {
   background: #ffffff;
 }
 
-/* Skeleton Loading Shimmer Effect */
+/* ── SKELETON LOADING SHIMMER EFFECT ── */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -221,12 +245,23 @@ input[type="range"]::-moz-range-thumb:hover {
 .animate-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.03) 25%,
-    rgba(255, 255, 255, 0.09) 37%,
-    rgba(255, 255, 255, 0.03) 63%
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite ease-in-out;
+  animation: shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-shimmer-fast {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 /* ── PERFORMANCE: GPU OFF-SCREEN CONTENT VISIBILITY ── */

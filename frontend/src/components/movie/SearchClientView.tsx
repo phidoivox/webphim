@@ -10,12 +10,21 @@ interface SearchClientViewProps {
   keyword: string;
   movies: MovieSummary[];
   meta?: PaginationMeta;
+  initialParams?: {
+    type?: string;
+    genre?: string;
+    country?: string;
+    lang?: string;
+    year?: string;
+    sort?: string;
+  };
 }
 
 export default function SearchClientView({
   keyword,
   movies,
   meta,
+  initialParams = {},
 }: SearchClientViewProps) {
   // Bộ lọc mở sẵn để người dùng dễ chọn như ảnh 2, hoặc có thể đóng/mở
   const [isFilterOpen, setIsFilterOpen] = useState(true);
@@ -64,6 +73,9 @@ export default function SearchClientView({
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
         keyword={keyword}
+        initialType={initialParams.type}
+        initialGenre={initialParams.genre}
+        initialCountry={initialParams.country}
       />
 
       {/* Danh sách phim Grid 8 cột */}

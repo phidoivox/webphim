@@ -10,6 +10,7 @@ import {
   getAdminTaxonomyGenresApi,
   updateAdminMovieApi,
 } from "@/lib/api";
+import { parseEpisodesFromPhimApi } from "@/lib/phimapi";
 import { movieFormSchema } from "@/schemas/movie";
 
 import {
@@ -81,6 +82,40 @@ function extractYoutubeId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+export const SCHEDULE_DAY_OPTIONS = [
+  { value: 1, label: "Thứ 2" },
+  { value: 2, label: "Thứ 3" },
+  { value: 3, label: "Thứ 4" },
+  { value: 4, label: "Thứ 5" },
+  { value: 5, label: "Thứ 6" },
+  { value: 6, label: "Thứ 7" },
+  { value: 0, label: "CN" },
+] as const;
+
+/**
+ * Parse text ghi chú lịch (VD "Thứ 3, Thứ 6 lúc 20h") ra mảng ngày 0-6.
+ * Mirror frontend của Movie::parseScheduleDays bên backend.
+ */
+export function parseScheduleDaysFromText(text: string | null | undefined): number[] {
+  if (!text) return [];
+  const lower = text.toLowerCase();
+  const days: number[] = [];
+  if (lower.includes("chủ nhật") || lower.includes("chu nhat")) days.push(0);
+  if (/(^|[^a-z])cn([^a-z]|$)/.test(lower)) days.push(0);
+  const dayMatches = lower.matchAll(/(?:thứ|thu)\s*(\d)/g);
+  for (const m of dayMatches) {
+    const n = Number(m[1]);
+    if (n >= 2 && n <= 7) days.push(n === 7 ? 6 : n - 1);
+  }
+  if (lower.includes("thứ hai") || lower.includes("thu hai")) days.push(1);
+  if (lower.includes("thứ ba") || lower.includes("thu ba")) days.push(2);
+  if (lower.includes("thứ tư") || lower.includes("thứ bốn") || lower.includes("thu tu")) days.push(3);
+  if (lower.includes("thứ năm") || lower.includes("thu nam")) days.push(4);
+  if (lower.includes("thứ sáu") || lower.includes("thu sau")) days.push(5);
+  if (lower.includes("thứ bảy") || lower.includes("thu bay")) days.push(6);
+  return [...new Set(days)];
+}
+
 /**
  * Trích xuất slug phim từ chuỗi nhập hoặc URL PhimAPI
  */
@@ -139,6 +174,8 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
     duration: initialData?.duration || "",
     episode_current: initialData?.episodeCurrent || initialData?.episode_current || "1",
     episode_total: initialData?.episodeTotal || initialData?.episode_total || "1",
+    notify_schedule: initialData?.notifySchedule || initialData?.notify_schedule || "",
+    schedule_days: initialData?.scheduleDays || initialData?.schedule_days || [],
     year: initialData?.year || new Date().getFullYear(),
     is_active: initialData?.isActive !== undefined ? initialData.isActive : true,
     is_featured: initialData?.isFeatured !== undefined ? initialData.isFeatured : false,
@@ -169,6 +206,7 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
       caption: g.caption || "",
       sort_order: g.sortOrder !== undefined ? g.sortOrder : idx + 1,
     })),
+    episodes: (initialData?.episodes || []) as any[],
   });
 
   // Actor, Director & Tag Quick Input States
@@ -523,6 +561,9 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
         }
       }
 
+      // Nạp danh sách tập phim & server phát từ PhimAPI
+      const apiEpisodes = parseEpisodesFromPhimApi(item.episodes);
+
       setFormData((prev: any) => ({
         ...prev,
         name: item.name || prev.name,
@@ -535,8 +576,8 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
         lang: item.lang || prev.lang,
         year: item.year ? Number(item.year) : prev.year,
         duration: item.time || prev.duration,
-        episode_current: item.episode_current || (movieType === "single" ? "Full" : "Tập 1"),
-        episode_total: item.episode_total ? String(item.episode_total) : (movieType === "single" ? "1" : "16"),
+        episode_current: item.episode_current || (apiEpisodes.length > 0 ? (movieType === "single" ? "Full" : `Tập ${apiEpisodes.length}`) : (movieType === "single" ? "Full" : "Tập 1")),
+        episode_total: item.episode_total ? String(item.episode_total) : (apiEpisodes.length > 0 ? `${apiEpisodes.length} tập` : (movieType === "single" ? "1" : "16")),
         is_cinema: Boolean(item.chieurap),
         thumb_url: item.thumb_url || bestBackdropFromImages || prev.thumb_url,
         poster_url: item.poster_url || bestPosterFromImages || prev.poster_url,
@@ -552,10 +593,11 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
         actors: apiActors.length > 0 ? apiActors : prev.actors,
         directors: apiDirectors.length > 0 ? apiDirectors : prev.directors,
         galleries: newGalleriesFromApi.length > 0 ? newGalleriesFromApi : prev.galleries,
+        episodes: apiEpisodes.length > 0 ? apiEpisodes : prev.episodes,
       }));
 
       setSuccessMessage(
-        `⚡ Đã tự động lấy đầy đủ thông tin, ${matchedGenreIds.length} thể loại, ${matchedCountryIds.length} quốc gia, ${apiTags.length} từ khóa/tags, ${apiActors.length} diễn viên & ${newGalleriesFromApi.length} ảnh cho phim "${item.name}"!`
+        `⚡ Đã tự động lấy đầy đủ thông tin, ${apiEpisodes.length > 0 ? `${apiEpisodes.length} tập (${item.episodes?.length || 0} server), ` : ""}${matchedGenreIds.length} thể loại, ${matchedCountryIds.length} quốc gia, ${apiTags.length} từ khóa/tags, ${apiActors.length} diễn viên & ${newGalleriesFromApi.length} ảnh cho phim "${item.name}"!`
       );
     } catch (err: any) {
       setError(err?.message || "Có lỗi xảy ra khi lấy thông tin từ PhimAPI.");
@@ -783,6 +825,8 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
 
       const payload = {
         ...formData,
+        notify_schedule: formData.notify_schedule?.trim() || null,
+        schedule_days: formData.schedule_days.length > 0 ? formData.schedule_days : null,
         slug: formData.slug || generateVietnameseSlug(formData.name),
         duration: formattedDuration || (isSeries ? "45 phút/tập" : "120 phút"),
         episode_current: isSeries
@@ -801,7 +845,7 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
           .filter((a: any) => Boolean(a && (typeof a === "string" ? a.trim() : a.name?.trim())))
           .map((a: any, idx: number) => ({
             id: typeof a === "object" ? a.id || null : null,
-            name: typeof a === "string" ? a.trim() : a.name.trim(),
+            name: typeof a === "string" ? a.trim() : (a.name?.trim() || ""),
             character_name: typeof a === "object" ? a.character_name?.trim() || null : null,
             sort_order: idx + 1,
           })),
@@ -809,7 +853,7 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
           .filter((d: any) => Boolean(d && (typeof d === "string" ? d.trim() : d.name?.trim())))
           .map((d: any, idx: number) => ({
             id: typeof d === "object" ? d.id || null : null,
-            name: typeof d === "string" ? d.trim() : d.name.trim(),
+            name: typeof d === "string" ? d.trim() : (d.name?.trim() || ""),
             sort_order: idx + 1,
           })),
         galleries: formData.galleries
@@ -822,6 +866,25 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
             caption: g.caption?.trim() || null,
             sort_order: idx + 1,
           })),
+        episodes: formData.episodes?.length
+          ? formData.episodes.map((ep: any, idx: number) => ({
+              name: ep.name,
+              slug: ep.slug,
+              sort_order: ep.sort_order ?? ep.sortOrder ?? idx + 1,
+              servers: Array.isArray(ep.servers)
+                ? ep.servers
+                    .filter((s: any) => ((s.server_name ?? s.serverName ?? "") as string).trim() !== "")
+                    .map((s: any, sIdx: number) => ({
+                      server_name: ((s.server_name ?? s.serverName) as string).trim(),
+                      lang_type: s.lang_type ?? s.langType ?? "vietsub",
+                      link_m3u8: s.link_m3u8 ?? s.linkM3u8 ?? null,
+                      link_embed: s.link_embed ?? s.linkEmbed ?? null,
+                      sort_order: s.sort_order ?? s.sortOrder ?? sIdx + 1,
+                      is_active: s.is_active ?? s.isActive ?? true,
+                    }))
+                : [],
+            }))
+          : undefined,
       };
 
       if (isEdit) {
@@ -938,38 +1001,47 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
           </button>
         </div>
 
-        {!isEdit && (
-          <div className="flex items-center gap-2">
-            {formData.slug && (
-              <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-mono">
-                <span>Slug:</span>
-                <code className="text-slate-300 bg-white/5 px-2 py-0.5 rounded border border-white/10">
-                  {formData.slug}
-                </code>
-              </div>
-            )}
+        <div className="flex items-center gap-2">
+          {formData.episodes && formData.episodes.length > 0 && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
+              <CheckCircle2Icon className="h-3.5 w-3.5" />
+              <span>Đã nạp sẵn {formData.episodes.length} tập</span>
+            </div>
+          )}
 
-            <button
-              type="button"
-              onClick={() => handleFetchPhimApi()}
-              disabled={fetchingPhimApi || (!formData.name.trim() && !formData.slug.trim())}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-              title="Tự động lấy toàn bộ thông tin & ảnh từ PhimAPI"
-            >
-              {fetchingPhimApi ? (
-                <>
-                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Đang lấy...</span>
-                </>
-              ) : (
-                <>
-                  <SparklesIcon className="h-3 w-3 text-slate-400" />
-                  <span>Lấy từ PhimAPI</span>
-                </>
+          {!isEdit && (
+            <div className="flex items-center gap-2">
+              {formData.slug && (
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+                  <span>Slug:</span>
+                  <code className="text-slate-300 bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                    {formData.slug}
+                  </code>
+                </div>
               )}
-            </button>
-          </div>
-        )}
+
+              <button
+                type="button"
+                onClick={() => handleFetchPhimApi()}
+                disabled={fetchingPhimApi || (!formData.name.trim() && !formData.slug.trim())}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                title="Tự động lấy toàn bộ thông tin & ảnh từ PhimAPI"
+              >
+                {fetchingPhimApi ? (
+                  <>
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span>Đang lấy...</span>
+                  </>
+                ) : (
+                  <>
+                    <SparklesIcon className="h-3 w-3 text-slate-400" />
+                    <span>Lấy từ PhimAPI</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── TAB 1: THÔNG TIN CƠ BẢN ── */}
@@ -1191,6 +1263,73 @@ const MovieForm = forwardRef<MovieFormHandle, MovieFormProps>(function MovieForm
               {isSeries && (
                 <p className="text-[11px] text-slate-400 bg-white/[0.02] p-2 rounded-lg border border-white/5">
                   💡 <strong>Tập hiện tại:</strong> Hệ thống sẽ tự động cập nhật theo số lượng tập thực tế bạn thêm trong tab <em>&quot;2. Tập Phim &amp; Nguồn Video&quot;</em>.
+                </p>
+              )}
+
+              {/* 4. Lịch chiếu tuần — chỉ áp dụng phim bộ/TV đang chiếu */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Ngày chiếu trong tuần
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {SCHEDULE_DAY_OPTIONS.map((opt) => {
+                      const checked = (formData.schedule_days || []).includes(opt.value);
+                      return (
+                        <label
+                          key={opt.value}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                            checked
+                              ? "border-accent bg-accent/10 text-accent font-semibold"
+                              : "border-white/10 bg-[#141722] text-white/60 hover:border-white/20"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={checked}
+                            onChange={() => {
+                              setFormData((prev) => {
+                                const current = prev.schedule_days || [];
+                                const next = checked
+                                  ? current.filter((d: number) => d !== opt.value)
+                                  : [...current, opt.value];
+                                return { ...prev, schedule_days: next };
+                              });
+                            }}
+                          />
+                          {opt.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Ghi chú lịch chiếu
+                  </label>
+                  <input
+                    type="text"
+                    name="notify_schedule"
+                    value={formData.notify_schedule}
+                    onChange={handleChange}
+                    onBlur={(e) => {
+                      // Chưa chọn ngày nào + text parse được -> tự điền checkboxes
+                      if ((formData.schedule_days || []).length > 0) return;
+                      const parsed = parseScheduleDaysFromText(e.target.value);
+                      if (parsed.length > 0) {
+                        setFormData((prev) => ({ ...prev, schedule_days: parsed }));
+                      }
+                    }}
+                    placeholder='VD: "Thứ 3, Thứ 6 lúc 20h" (tự nhận ngày nếu chưa chọn)'
+                    maxLength={255}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-accent focus:outline-none"
+                  />
+                </div>
+              </div>
+              {!isSeries && ((formData.schedule_days || []).length > 0 || formData.notify_schedule) && (
+                <p className="text-[11px] text-amber-400/90 bg-amber-500/[0.06] p-2 rounded-lg border border-amber-500/20">
+                  ⚠️ Lịch chiếu chỉ hiển thị với phim Bộ / TV Show đang chiếu. Phim lẻ không lên trang lịch chiếu.
                 </p>
               )}
             </div>

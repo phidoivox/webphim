@@ -184,13 +184,47 @@ export function useComments(movieIdOrSlug: string | number) {
 
       return { previousData };
     },
-    onError: (_err, _commentId, context) => {
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.setQueryData<InfiniteData<CommentListResponse>>(queryKey, (old) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            data: page.data.map((c: CommentItem) => {
+              if (c.id === data.commentId) {
+                return {
+                  ...c,
+                  isLiked: data.isLiked,
+                  likesCount: data.likesCount,
+                };
+              }
+              if (c.replies) {
+                return {
+                  ...c,
+                  replies: c.replies.map((r) =>
+                    r.id === data.commentId
+                      ? {
+                          ...r,
+                          isLiked: data.isLiked,
+                          likesCount: data.likesCount,
+                        }
+                      : r
+                  ),
+                };
+              }
+              return c;
+            }),
+          })),
+        };
+      });
+    },
+    onError: (err: Error, _commentId, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(queryKey, context.previousData);
       }
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey });
+      toast.error(err.message || "Không thể thực hiện thao tác thích bình luận.");
     },
   });
 

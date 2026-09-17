@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronRightIcon, HomeIcon } from "@/components/ui/icons";
 import { ScheduleGrid } from "@/components/schedule/ScheduleGrid";
-import { getWeeklyScheduleApi } from "@/lib/api";
+import { getCachedWeeklySchedule } from "@/lib/cached-content";
+import { getSiteUrl } from "@/lib/env";
 import type { WeeklyScheduleData } from "@/types/schedule";
 
 export const metadata: Metadata = {
@@ -36,8 +37,8 @@ export default async function SchedulePage() {
   let scheduleData = DEFAULT_SCHEDULE;
 
   try {
-    const res = await getWeeklyScheduleApi();
-    if (res && res.success && res.data) {
+    const res = await getCachedWeeklySchedule();
+    if (res && res.status === "success" && res.data) {
       scheduleData = {
         ...DEFAULT_SCHEDULE,
         ...res.data,
@@ -48,6 +49,7 @@ export default async function SchedulePage() {
   }
 
   // Schema Structured Data
+  const siteUrl = getSiteUrl();
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -60,13 +62,13 @@ export default async function SchedulePage() {
           "@type": "ListItem",
           position: 1,
           name: "Trang chủ",
-          item: "https://webphim.com",
+          item: siteUrl,
         },
         {
           "@type": "ListItem",
           position: 2,
           name: "Lịch chiếu",
-          item: "https://webphim.com/lich-chieu",
+          item: `${siteUrl}/lich-chieu`,
         },
       ],
     },
@@ -76,7 +78,7 @@ export default async function SchedulePage() {
     <main className="min-h-screen pt-20 sm:pt-24 pb-16">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Breadcrumb */}

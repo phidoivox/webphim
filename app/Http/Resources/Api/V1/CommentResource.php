@@ -42,12 +42,18 @@ class CommentResource extends JsonResource
                 'avatarUrl' => $comment->user?->avatar_url,
                 'role' => $comment->user?->role ?? 'user',
             ],
-            'movie' => $this->whenLoaded('movie', fn () => [
-                'id' => $comment->movie->id,
-                'name' => $comment->movie->name,
-                'slug' => $comment->movie->slug,
-                'posterUrl' => $comment->movie->poster_url,
-            ]),
+            'movie' => $this->whenLoaded('movie', function () use ($comment) {
+                if (! $comment->movie) {
+                    return null;
+                }
+
+                return [
+                    'id' => $comment->movie->id,
+                    'name' => $comment->movie->name,
+                    'slug' => $comment->movie->slug,
+                    'posterUrl' => $comment->movie->poster_url,
+                ];
+            }),
             'replies' => CommentResource::collection($this->whenLoaded('replies')),
             'createdAt' => $comment->created_at?->toIso8601String(),
             'updatedAt' => $comment->updated_at?->toIso8601String(),

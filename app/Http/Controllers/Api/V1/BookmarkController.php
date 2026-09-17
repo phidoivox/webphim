@@ -49,16 +49,7 @@ class BookmarkController extends Controller
 
         $bookmarks = $this->bookmarkService->getPaginatedBookmarks($user, $filters);
 
-        return response()->json([
-            'status' => 'success',
-            'data' => BookmarkResource::collection($bookmarks),
-            'meta' => [
-                'currentPage' => $bookmarks->currentPage(),
-                'lastPage' => $bookmarks->lastPage(),
-                'perPage' => $bookmarks->perPage(),
-                'total' => $bookmarks->total(),
-            ],
-        ]);
+        return response()->paginated($bookmarks, BookmarkResource::class);
     }
 
     /**

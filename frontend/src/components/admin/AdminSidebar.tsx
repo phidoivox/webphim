@@ -258,7 +258,7 @@ export default function AdminSidebar() {
           />
 
           {/* Drawer Panel */}
-          <div className="fixed inset-y-0 left-0 w-72 bg-[#0d0f17] shadow-2xl border-r border-white/10 flex flex-col z-10 animate-in slide-in-from-left duration-200">
+          <div className="fixed inset-y-0 left-0 w-72 bg-[#0d0f17] shadow-2xl border-r border-white/10 flex flex-col z-10 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] animate-in slide-in-from-left duration-200">
             {renderNavContent()}
           </div>
         </div>

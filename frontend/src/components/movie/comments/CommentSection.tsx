@@ -71,15 +71,24 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
       {/* ── Comments List ── */}
       <div className="space-y-4 pt-2">
         {isLoading ? (
-          /* Skeleton Loader */
-          <div className="space-y-4">
+          /* Enhanced Skeleton Loader */
+          <div className="space-y-5 select-none">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="flex gap-3 animate-pulse">
-                <div className="h-10 w-10 rounded-full bg-white/5 shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-32 rounded bg-white/5" />
-                  <div className="h-3.5 w-full max-w-md rounded bg-white/5" />
-                  <div className="h-3 w-20 rounded bg-white/5" />
+              <div key={i} className="flex gap-3.5 animate-shimmer rounded-2xl bg-surface/40 p-3.5 border border-white/5">
+                <div className="h-10 w-10 rounded-full bg-white/10 shrink-0" />
+                <div className="flex-1 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3.5 w-28 rounded-md bg-white/15 animate-pulse" />
+                    <div className="h-3 w-16 rounded bg-white/5" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="h-3.5 w-full max-w-lg rounded bg-white/10" />
+                    <div className="h-3.5 w-3/4 rounded bg-white/10" />
+                  </div>
+                  <div className="flex items-center gap-4 pt-1">
+                    <div className="h-4 w-12 rounded bg-white/5" />
+                    <div className="h-4 w-14 rounded bg-white/5" />
+                  </div>
                 </div>
               </div>
             ))}

@@ -33,7 +33,7 @@ class MovieObserver
             }
         }
 
-        $this->invalidateCache($movie);
+        self::invalidateFor($movie);
     }
 
     /**
@@ -41,7 +41,7 @@ class MovieObserver
      */
     public function deleted(Movie $movie): void
     {
-        $this->invalidateCache($movie);
+        self::invalidateFor($movie);
     }
 
     /**
@@ -49,7 +49,7 @@ class MovieObserver
      */
     public function restored(Movie $movie): void
     {
-        $this->invalidateCache($movie);
+        self::invalidateFor($movie);
     }
 
     /**
@@ -57,21 +57,34 @@ class MovieObserver
      */
     public function forceDeleted(Movie $movie): void
     {
-        $this->invalidateCache($movie);
+        self::invalidateFor($movie);
     }
 
     /**
      * Invalidate relevant cache keys (matching Cache::flexible keys) and trigger Next.js revalidation.
      */
-    protected function invalidateCache(Movie $movie): void
+    public static function invalidateFor(Movie $movie): void
     {
-        // Invalidate home page cache
-        Cache::forget('home:payload');
+        // Invalidate via Cache Tags if the store supports tags
+        if (Cache::supportsTags()) {
+            Cache::tags(['movies', 'movies_filter', 'movies_search', 'home', 'schedule', 'taxonomies', 'genres', 'countries'])->flush();
+            if (! empty($movie->slug)) {
+                Cache::tags(["movie:{$movie->slug}"])->flush();
+            }
+        }
 
-        // Invalidate movie detail cache
         if (! empty($movie->slug)) {
             Cache::forget("movie:{$movie->slug}");
         }
+
+        // Direct key invalidation fallback
+        Cache::forget('home:payload');
+        Cache::forget('movies:weekly_schedule');
+        for ($day = 0; $day <= 6; $day++) {
+            Cache::forget("movies:weekly_schedule:day:{$day}");
+        }
+        Cache::forget('genres:list');
+        Cache::forget('countries:list');
 
         // Asynchronously notify Next.js on-demand cache revalidation via defer()
         $slug = $movie->slug;
@@ -81,16 +94,21 @@ class MovieObserver
             }
 
             try {
-                $frontendUrl = rtrim(config('services.frontend.url', env('FRONTEND_URL', 'http://localhost:3000')), '/');
-                $secret = env('REVALIDATION_SECRET', 'webphim_secret_revalidate_2026');
+                $frontendUrl = rtrim((string) config('services.frontend.url', 'http://localhost:3000'), '/');
+                $secret = (string) config('services.frontend.revalidation_secret');
 
-                $tags = ['home', 'movies'];
+                if ($secret === '') {
+                    Log::warning('Skipped Next.js cache revalidation: REVALIDATION_SECRET missing');
+
+                    return;
+                }
+
+                $tags = ['home', 'movies', 'schedule'];
                 if (! empty($slug)) {
                     $tags[] = "movie-{$slug}";
                 }
 
-                Http::timeout(3)->post("{$frontendUrl}/api/revalidate", [
-                    'secret' => $secret,
+                Http::timeout(3)->withToken($secret)->post("{$frontendUrl}/api/revalidate", [
                     'tags' => $tags,
                 ]);
             } catch (\Throwable $e) {

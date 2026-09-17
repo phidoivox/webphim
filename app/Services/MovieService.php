@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Http\Resources\Api\V1\MovieDetailResource;
+use App\Http\Resources\Api\V1\MovieSummaryResource;
+use App\Http\Resources\Api\V1\PersonSearchResource;
 use App\Models\Movie;
 use App\Models\Person;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -17,7 +20,7 @@ class MovieService
      *
      * @param  array<string, mixed>  $filters
      */
-    public function filterMovies(array $filters, int $perPage = 24): LengthAwarePaginator
+    public function filterMovies(array $filters, int $perPage = 24, ?int $page = null): LengthAwarePaginator
     {
         $query = Movie::query()
             ->active()
@@ -44,44 +47,19 @@ class MovieService
         }
 
         if (! empty($filters['type'])) {
-            $type = (string) $filters['type'];
-            if ($type === 'tv-shows' || $type === 'tv-show') {
-                $query->where(function ($q) {
-                    $q->where('type', 'tv-show')
-                        ->orWhere('type', 'tv-shows')
-                        ->orWhereHas('genres', fn ($gq) => $gq->where('slug', 'tv-shows'));
-                });
-            } elseif ($type === 'hoat-hinh' || $type === 'anime') {
-                $query->where(function ($q) {
-                    $q->where('type', 'hoat-hinh')
-                        ->orWhere('type', 'anime')
-                        ->orWhereHas('genres', fn ($gq) => $gq->whereIn('slug', ['hoat-hinh', 'anime']));
-                });
-            } else {
-                $query->ofType($type);
-            }
+            $query->ofType((string) $filters['type']);
         }
 
         if (! empty($filters['genre'])) {
-            $query->whereHas('genres', function ($q) use ($filters) {
-                $q->where('slug', $filters['genre']);
-            });
+            $query->ofGenre((string) $filters['genre']);
         }
 
         if (! empty($filters['country'])) {
-            $query->whereHas('countries', function ($q) use ($filters) {
-                $q->where('slug', $filters['country']);
-            });
+            $query->ofCountry((string) $filters['country']);
         }
 
         if (! empty($filters['lang'])) {
-            $lang = $filters['lang'];
-            $query->where(function ($q) use ($lang) {
-                $q->where('lang', 'like', "%{$lang}%")
-                    ->orWhereHas('episodes.servers', function ($sq) use ($lang) {
-                        $sq->where('lang_type', $lang);
-                    });
-            });
+            $query->ofLang((string) $filters['lang']);
         }
 
         if (! empty($filters['year'])) {
@@ -97,7 +75,34 @@ class MovieService
             default => $query->orderByDesc('created_at'),
         };
 
-        return $query->paginate($perPage);
+        return $query->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    /**
+     * Lấy danh sách phim phân trang kèm bộ lọc đã transform chuẩn REST DTO và cache SWR Redis.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{data: array<int, mixed>, meta: array<string, mixed>}
+     */
+    public function getFilteredMoviesPayload(array $filters, int $perPage = 24, int $page = 1): array
+    {
+        ksort($filters);
+        $cacheKey = 'movies:filter:'.md5(json_encode($filters).":per_page:{$perPage}:page:{$page}");
+
+        return Cache::tags(['movies', 'movies_filter'])->flexible($cacheKey, [180, 600], function () use ($filters, $perPage, $page) {
+            $paginator = $this->filterMovies($filters, $perPage, $page);
+
+            return [
+                'data' => MovieSummaryResource::collection($paginator->items())->resolve(),
+                'meta' => [
+                    'currentPage' => $paginator->currentPage(),
+                    'lastPage' => $paginator->lastPage(),
+                    'perPage' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                    'hasMore' => $paginator->hasMorePages(),
+                ],
+            ];
+        });
     }
 
     /**
@@ -121,18 +126,16 @@ class MovieService
 
         $moviesQuery = Movie::query()->active();
 
-        if ($isFulltext && mb_strlen($keyword) >= 3) {
-            $moviesQuery->where(function ($q) use ($keyword, $escaped) {
+        $moviesQuery->where(function ($q) use ($keyword, $escaped, $isFulltext) {
+            if ($isFulltext && mb_strlen($keyword) >= 3) {
                 $q->whereFullText(['name', 'origin_name'], $keyword)
                     ->orWhere('name', 'like', "%{$escaped}%")
                     ->orWhere('origin_name', 'like', "%{$escaped}%");
-            });
-        } else {
-            $moviesQuery->where(function ($q) use ($escaped) {
+            } else {
                 $q->where('name', 'like', "%{$escaped}%")
                     ->orWhere('origin_name', 'like', "%{$escaped}%");
-            });
-        }
+            }
+        });
 
         $movies = $moviesQuery
             ->with(['genres:id,name,slug'])
@@ -148,8 +151,7 @@ class MovieService
             ->with(['movies' => function ($mq) {
                 $mq->select('movies.id', 'movies.name', 'movies.slug')
                     ->where('movies.is_active', true)
-                    ->orderByDesc('view_count')
-                    ->limit(5);
+                    ->orderByDesc('view_count');
             }])
             ->limit($limit)
             ->get();
@@ -158,6 +160,33 @@ class MovieService
             'movies' => $movies,
             'actors' => $actors,
         ];
+    }
+
+    /**
+     * Lấy kết quả tìm kiếm đã transform và cache SWR Redis.
+     *
+     * @return array{movies: array<int, mixed>, actors: array<int, mixed>}
+     */
+    public function getSearchAllPayload(string $keyword, int $limit = 5): array
+    {
+        $keyword = trim($keyword);
+        if (empty($keyword)) {
+            return [
+                'movies' => [],
+                'actors' => [],
+            ];
+        }
+
+        $cacheKey = 'movies:search:'.md5(mb_strtolower($keyword).":limit:{$limit}");
+
+        return Cache::tags(['movies', 'movies_search'])->flexible($cacheKey, [180, 600], function () use ($keyword, $limit) {
+            $result = $this->searchAll($keyword, $limit);
+
+            return [
+                'movies' => MovieSummaryResource::collection($result['movies'])->resolve(),
+                'actors' => PersonSearchResource::collection($result['actors'])->resolve(),
+            ];
+        });
     }
 
     /**
@@ -173,24 +202,29 @@ class MovieService
     }
 
     /**
-     * Lấy thông tin chi tiết một bộ phim theo slug (SWR via Cache::flexible với fallback an toàn).
+     * Lấy dữ liệu chi tiết một bộ phim theo slug đã transform chuẩn DTO (SWR via Cache::flexible kết hợp Redis Tags).
+     *
+     * @return array<string, mixed>
+     *
+     * @throws ModelNotFoundException
+     */
+    public function getMovieDetailPayload(string $slug): array
+    {
+        return Cache::tags(['movies', "movie:{$slug}"])->flexible("movie:{$slug}", [300, 600], function () use ($slug) {
+            $movie = $this->fetchMovieDetailQuery($slug);
+            $similar = $this->getSimilarMovies($movie);
+
+            return (new MovieDetailResource($movie, $similar))->resolve();
+        });
+    }
+
+    /**
+     * Lấy model Movie chi tiết (dùng khi cần truy cập Eloquent instance trực tiếp).
      *
      * @throws ModelNotFoundException
      */
     public function getMovieDetail(string $slug): Movie
     {
-        try {
-            $cached = Cache::flexible("movie:{$slug}", [300, 600], fn () => $this->fetchMovieDetailQuery($slug));
-
-            if ($cached instanceof Movie) {
-                return $cached;
-            }
-        } catch (\Throwable) {
-            // Bỏ qua lỗi deserialize từ cache (ví dụ __PHP_Incomplete_Class) và load trực tiếp từ DB
-        }
-
-        Cache::forget("movie:{$slug}");
-
         return $this->fetchMovieDetailQuery($slug);
     }
 
@@ -227,10 +261,18 @@ class MovieService
     }
 
     /**
-     * Tăng lượt xem phim.
+     * Tăng lượt xem phim theo model instance.
      */
     public function incrementViewCount(Movie $movie): void
     {
         $movie->increment('view_count');
+    }
+
+    /**
+     * Tăng lượt xem phim theo slug (chạy ngầm sau response).
+     */
+    public function incrementViewCountBySlug(string $slug): void
+    {
+        Movie::query()->where('slug', $slug)->increment('view_count');
     }
 }

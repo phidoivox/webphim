@@ -22,4 +22,33 @@ enum ServerLangType: string
             self::Raw => 'Raw',
         };
     }
+
+    public static function fromString(?string $value): self
+    {
+        if (empty($value)) {
+            return self::Vietsub;
+        }
+
+        $val = trim($value);
+        $direct = self::tryFrom($val);
+        if ($direct !== null) {
+            return $direct;
+        }
+
+        $normalized = mb_strtolower($val);
+        if (str_contains($normalized, 'thuyet-minh') || str_contains($normalized, 'thuyết minh') || str_contains($normalized, 'thuyet minh') || str_contains($normalized, 'thuyetminh')) {
+            return self::ThuyetMinh;
+        }
+        if (str_contains($normalized, 'long-tieng') || str_contains($normalized, 'lồng tiếng') || str_contains($normalized, 'long tieng') || str_contains($normalized, 'longtieng')) {
+            return self::LongTieng;
+        }
+        if (str_contains($normalized, 'engsub') || preg_match('/(^|[^a-z0-9])eng([^a-z0-9]|$)/u', $normalized)) {
+            return self::Engsub;
+        }
+        if ($normalized === 'raw') {
+            return self::Raw;
+        }
+
+        return self::Vietsub;
+    }
 }

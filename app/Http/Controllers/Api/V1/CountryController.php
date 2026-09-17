@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\CountryResource;
 use App\Models\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -14,20 +15,16 @@ class CountryController extends Controller
      */
     public function index(): JsonResponse
     {
-        $countries = Cache::tags(['countries'])->remember('countries:list', 3600, function () {
-            return Country::query()
+        $countries = Cache::tags(['taxonomies', 'countries'])->flexible('countries:list', [1800, 3600], function () {
+            $collection = Country::query()
                 ->orderBy('name')
-                ->get()
-                ->map(fn (Country $country) => [
-                    'id' => $country->id,
-                    'name' => $country->name,
-                    'slug' => $country->slug,
-                ])
-                ->values()
-                ->all();
+                ->get();
+
+            return CountryResource::collection($collection)->resolve();
         });
 
         return response()->json([
+            'status' => 'success',
             'data' => $countries,
         ]);
     }

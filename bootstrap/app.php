@@ -20,6 +20,16 @@ return Application::configure(basePath: dirname(__DIR__))
         ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust proxies giới hạn theo env TRUSTED_PROXIES (comma-separated IPs/CIDRs).
+        // Bỏ trống = không trust thêm (mặc định Laravel); '*' chỉ khi sau reverse proxy tin cậy.
+        $trustedEnv = trim((string) env('TRUSTED_PROXIES', ''));
+        if ($trustedEnv !== '') {
+            $trusted = $trustedEnv === '*'
+                ? '*'
+                : array_values(array_filter(array_map('trim', explode(',', $trustedEnv))));
+            $middleware->trustProxies(at: $trusted);
+        }
+
         $middleware->alias([
             'admin' => EnsureUserIsAdmin::class,
         ]);

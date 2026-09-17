@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import {
   BookmarkIcon,
@@ -50,7 +49,8 @@ export default function UserMenu() {
         className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/90 transition-all hover:border-accent/60 hover:bg-white/20 hover:text-white cursor-pointer overflow-hidden"
       >
         {isAuthenticated && user?.avatarUrl ? (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={user.avatarUrl}
             alt={user.name}
             width={36}
@@ -85,6 +85,15 @@ export default function UserMenu() {
 
               {/* Links */}
               <div className="py-1.5 space-y-0.5">
+                <Link
+                  href="/profile"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+                >
+                  <UserIcon className="h-4 w-4 text-white/50" />
+                  <span>Hồ sơ & Bộ sưu tập</span>
+                </Link>
+
                 <Link
                   href="/thu-vien"
                   onClick={() => setOpen(false)}

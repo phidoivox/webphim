@@ -37,7 +37,8 @@ class UpdateMovieRequest extends FormRequest
             'episode_current' => ['nullable', 'string', 'max:100'],
             'episode_total' => ['nullable', 'string', 'max:100'],
             'notify_schedule' => ['nullable', 'string', 'max:255'],
-            'schedule_day_of_week' => ['nullable', 'integer', 'between:0,6'],
+            'schedule_days' => ['nullable', 'array', 'max:7'],
+            'schedule_days.*' => ['integer', 'between:0,6'],
             'year' => ['nullable', 'integer', 'min:1900', 'max:2099'],
             'tmdb_rating' => ['nullable', 'numeric', 'min:0', 'max:10'],
             'imdb_rating' => ['nullable', 'numeric', 'min:0', 'max:10'],
@@ -70,6 +71,17 @@ class UpdateMovieRequest extends FormRequest
             'galleries.*.thumb_url' => ['nullable', 'string', 'max:1000'],
             'galleries.*.caption' => ['nullable', 'string', 'max:255'],
             'galleries.*.sort_order' => ['nullable', 'integer'],
+            'episodes' => ['nullable', 'array'],
+            'episodes.*.name' => ['required_with:episodes', 'string', 'max:255'],
+            'episodes.*.slug' => ['required_with:episodes', 'string', 'max:255'],
+            'episodes.*.sort_order' => ['nullable', 'integer'],
+            'episodes.*.servers' => ['nullable', 'array'],
+            'episodes.*.servers.*.server_name' => ['required', 'string', 'max:255'],
+            'episodes.*.servers.*.lang_type' => ['nullable', 'string'],
+            'episodes.*.servers.*.link_m3u8' => ['nullable', 'string', 'max:1000'],
+            'episodes.*.servers.*.link_embed' => ['nullable', 'string', 'max:1000'],
+            'episodes.*.servers.*.sort_order' => ['nullable', 'integer'],
+            'episodes.*.servers.*.is_active' => ['nullable', 'boolean'],
         ];
     }
 }

@@ -473,10 +473,10 @@ export default function BookmarkView() {
         {loading ? (
           <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 pt-2">
             {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="animate-pulse space-y-2">
-                <div className="aspect-[2/3] w-full rounded-lg bg-surface" />
-                <div className="h-3.5 w-3/4 rounded bg-surface" />
-                <div className="h-3 w-1/2 rounded bg-surface" />
+              <div key={i} className="space-y-2 select-none">
+                <div className="aspect-[2/3] w-full rounded-xl bg-surface border border-white/5 shadow-md animate-shimmer" />
+                <div className="h-3.5 w-3/4 rounded-md bg-white/15 animate-pulse" />
+                <div className="h-3 w-1/2 rounded-md bg-white/5" />
               </div>
             ))}
           </div>
@@ -575,9 +575,9 @@ export default function BookmarkView() {
                       }}
                       title="Xóa khỏi tủ phim"
                       aria-label={`Xóa ${movie.name} khỏi tủ phim`}
-                      className="absolute top-1.5 right-1.5 z-20 flex h-6 w-6 items-center justify-center rounded-md bg-black/80 text-muted opacity-0 group-hover:opacity-100 hover:bg-red-600 hover:text-white transition-all cursor-pointer shadow"
+                      className="absolute top-1.5 right-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/80 text-white/80 opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-600 hover:text-white transition-all cursor-pointer shadow active:scale-90"
                     >
-                      <TrashIcon className="h-3 w-3" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </button>
 
                     {/* Bottom Category Tag */}

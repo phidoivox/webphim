@@ -1,30 +1,27 @@
 "use client";
 
-import React, { useEffect } from "react";
+import { useEffect, useState } from "react";
+import type React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AdminAuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAuthenticated } = useAuth();
-  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#090b10] text-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          <p className="text-xs text-white/60">Đang xác thực quyền quản trị viên...</p>
-        </div>
-      </div>
-    );
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || isLoading) {
+    return <>{children}</>;
   }
 
   const isAdminOrMod = isAuthenticated && user && (user.role === "admin" || user.role === "moderator");
 
   if (!isAdminOrMod) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#090b10] px-4 text-white">
+      <div className="flex flex-1 items-center justify-center p-6 text-white min-h-[60vh]">
         <div className="max-w-md text-center rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl shadow-2xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-400 border border-red-500/30 text-2xl font-bold mb-4">
             !

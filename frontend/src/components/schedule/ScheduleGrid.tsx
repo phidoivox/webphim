@@ -152,7 +152,7 @@ export function ScheduleGrid({ initialSchedule }: ScheduleGridProps) {
         </button>
 
         {/* 7 Days Bar */}
-        <div className="grid flex-1 grid-cols-7 gap-1 sm:gap-2">
+        <div className="flex flex-1 items-center gap-1.5 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-7 sm:gap-2">
           {daysList.map((day) => {
             const isSelected = day.dateKey === currentSelectedDay.dateKey;
 
@@ -161,16 +161,16 @@ export function ScheduleGrid({ initialSchedule }: ScheduleGridProps) {
                 key={day.dateKey}
                 type="button"
                 onClick={() => setSelectedDateKey(day.dateKey)}
-                className={`flex flex-col items-center justify-center rounded-xl py-2 sm:py-2.5 transition cursor-pointer ${
+                className={`flex min-w-[72px] sm:min-w-0 flex-1 shrink-0 flex-col items-center justify-center rounded-xl py-2 sm:py-2.5 transition active:scale-95 cursor-pointer ${
                   isSelected
                     ? "border-t-2 border-amber-400 bg-[#1e1e2d] text-amber-400 shadow-md"
                     : "border-t-2 border-transparent bg-[#14141c] text-white/60 hover:bg-[#1a1a24] hover:text-white"
                 }`}
               >
-                <span className={`text-[11px] sm:text-xs font-semibold ${isSelected ? "text-amber-400" : "text-white/70"}`}>
+                <span className={`text-[10px] sm:text-xs font-semibold ${isSelected ? "text-amber-400" : "text-white/70"}`}>
                   {day.dateStr}
                 </span>
-                <span className={`mt-0.5 text-xs sm:text-sm font-bold ${isSelected ? "text-amber-400" : "text-white"}`}>
+                <span className={`mt-0.5 text-xs sm:text-sm font-bold truncate max-w-full px-1 ${isSelected ? "text-amber-400" : "text-white"}`}>
                   {day.dayLabel}
                 </span>
               </button>

@@ -140,11 +140,14 @@ export default function HeroBanner({ movies }: { movies: HeroMovie[] }) {
   return (
     <section
       ref={bannerRef}
-      className="relative w-full h-[75vh] min-h-[540px] max-h-[850px] lg:h-[88vh] overflow-hidden select-none bg-base group"
+      className="relative w-full h-[75vh] min-h-[460px] max-h-[850px] lg:h-[88vh] [@media(max-height:540px)]:min-h-[340px] [@media(max-height:540px)]:h-[100dvh] overflow-hidden select-none bg-base group"
     >
       {/* ═══════════════ 1. BACKGROUND POSTER / BACKDROP LAYER ═══════════════ */}
       <div className="absolute inset-0 w-full h-full overflow-hidden">
-        {movies.map((m, idx) => (
+        {movies.map((m, idx) => {
+          const isNear = idx === active || idx === (active + 1) % movies.length;
+          if (!isNear) return null;
+          return (
           <div
             key={m.id}
             className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-in-out ${
@@ -160,7 +163,8 @@ export default function HeroBanner({ movies }: { movies: HeroMovie[] }) {
               className="object-cover object-center"
             />
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ═══════════════ 2. VIDEO TRAILER PREVIEW LAYER (NETFLIX STYLE) ═══════════════ */}
@@ -214,17 +218,17 @@ export default function HeroBanner({ movies }: { movies: HeroMovie[] }) {
       <div className="absolute inset-0 bg-gradient-to-b from-base/70 via-transparent to-transparent z-10 h-28 pointer-events-none" />
 
       {/* ═══════════════ 4. MAIN BANNER CONTENT ═══════════════ */}
-      <div className="relative z-20 h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 flex flex-col justify-end pb-12 lg:pb-16">
-        <div key={movie.id} className="max-w-xl space-y-2.5 sm:space-y-3">
+      <div className="relative z-20 h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 flex flex-col justify-end pb-10 sm:pb-12 lg:pb-16 [@media(max-height:540px)]:pb-6">
+        <div key={movie.id} className="max-w-xl space-y-2 sm:space-y-3">
           {/* Main Title Typography */}
           <div className="space-y-0.5">
-            <h1 className="animate-slide-right font-display text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] leading-[1.1] [animation-delay:40ms]">
+            <h1 className="animate-slide-right font-display text-xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] leading-[1.15] sm:leading-[1.1] [animation-delay:40ms]">
               {movie.name}
             </h1>
             {movie.originName && (
               <p
                 style={{ color: "#fbbf24" }}
-                className="animate-slide-right font-medium text-xs sm:text-sm tracking-wide drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] [animation-delay:80ms]"
+                className="animate-slide-right font-medium text-xs sm:text-sm tracking-wide drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] [animation-delay:80ms] line-clamp-1"
               >
                 {movie.originName}
               </p>
@@ -274,7 +278,7 @@ export default function HeroBanner({ movies }: { movies: HeroMovie[] }) {
             <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-surface/50 border border-white/15 backdrop-blur-xl shadow-xl">
               {/* Orange Play Button */}
               <Link
-                href={`/xem/${movie.slug}/${movie.firstEpisodeSlug || "tap-1"}`}
+                href={movie.firstEpisodeSlug ? `/xem/${movie.slug}/${movie.firstEpisodeSlug}` : `/xem/${movie.slug}`}
                 aria-label="Xem ngay"
                 className="w-10 h-10 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center shadow-md shadow-accent/40 transform hover:scale-105 active:scale-95 transition-all group/play"
               >

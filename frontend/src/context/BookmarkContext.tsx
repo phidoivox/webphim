@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -24,7 +25,6 @@ import { toast } from "sonner";
 const GUEST_BOOKMARKS_KEY = "webphim_guest_bookmarks";
 const LEGACY_FAVORITES_KEY = "webphim_favorites";
 const SYNC_CHANNEL_NAME = "webphim_bookmark_sync";
-const SYNC_DEBOUNCE_MS = 300; // 300ms trailing debounce chống lag khi click liên tục
 
 export interface MovieBookmarkMeta {
   id: number;
@@ -61,20 +61,11 @@ const BookmarkContext = createContext<BookmarkContextValue | undefined>(undefine
 export function BookmarkProvider({ children }: { children: ReactNode }) {
   const { token, isAuthenticated, isLoading: authLoading } = useAuth();
 
-  // 1. Quản lý trạng thái bằng cả State (cho Re-render) và Ref (cho Synchronous Read 0ms không bị stale closure)
-  const favoriteIdsRef = useRef<Set<number>>(new Set());
-  const watchlaterIdsRef = useRef<Set<number>>(new Set());
-  const serverFavoriteIdsRef = useRef<Set<number>>(new Set());
-  const serverWatchlaterIdsRef = useRef<Set<number>>(new Set());
+  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(() => new Set());
+  const [watchlaterIds, setWatchlaterIds] = useState<Set<number>>(() => new Set());
 
-  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
-  const [watchlaterIds, setWatchlaterIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState<boolean>(true);
-
+  const [loading, setLoading] = useState<boolean>(false);
   const broadcastRef = useRef<BroadcastChannel | null>(null);
-  // Timers cho từng cặp [movieId_type] để gom cụm request khi spam click
-  const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const pendingMoviesRef = useRef<Map<string, MovieBookmarkMeta>>(new Map());
 
   // Đọc danh sách bookmarks của Khách từ LocalStorage
   const getGuestBookmarks = useCallback((): GuestBookmarkItem[] => {
@@ -97,17 +88,6 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Cập nhật đồng thời Ref và State
-  const updateFavoriteIds = useCallback((next: Set<number>) => {
-    favoriteIdsRef.current = next;
-    setFavoriteIds(new Set(next));
-  }, []);
-
-  const updateWatchlaterIds = useCallback((next: Set<number>) => {
-    watchlaterIdsRef.current = next;
-    setWatchlaterIds(new Set(next));
-  }, []);
-
   // Tải danh sách bookmarks từ Cloud / Local
   const refreshBookmarks = useCallback(async () => {
     if (authLoading) return;
@@ -127,32 +107,24 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          serverFavoriteIdsRef.current = new Set(favs);
-          serverWatchlaterIdsRef.current = new Set(wls);
-          updateFavoriteIds(favs);
-          updateWatchlaterIds(wls);
+          setFavoriteIds(favs);
+          setWatchlaterIds(wls);
         }
       } catch {
         const guests = getGuestBookmarks();
-        const favs = new Set(guests.filter((g) => g.type === "favorite").map((g) => g.movieId));
-        const wls = new Set(guests.filter((g) => g.type === "watchlater").map((g) => g.movieId));
-        updateFavoriteIds(favs);
-        updateWatchlaterIds(wls);
+        setFavoriteIds(new Set(guests.filter((g) => g.type === "favorite").map((g) => g.movieId)));
+        setWatchlaterIds(new Set(guests.filter((g) => g.type === "watchlater").map((g) => g.movieId)));
       }
     } else {
       const guests = getGuestBookmarks();
-      const favs = new Set(guests.filter((g) => g.type === "favorite").map((g) => g.movieId));
-      const wls = new Set(guests.filter((g) => g.type === "watchlater").map((g) => g.movieId));
-      serverFavoriteIdsRef.current = new Set(favs);
-      serverWatchlaterIdsRef.current = new Set(wls);
-      updateFavoriteIds(favs);
-      updateWatchlaterIds(wls);
+      setFavoriteIds(new Set(guests.filter((g) => g.type === "favorite").map((g) => g.movieId)));
+      setWatchlaterIds(new Set(guests.filter((g) => g.type === "watchlater").map((g) => g.movieId)));
     }
 
     setLoading(false);
-  }, [authLoading, isAuthenticated, token, getGuestBookmarks, updateFavoriteIds, updateWatchlaterIds]);
+  }, [authLoading, isAuthenticated, token, getGuestBookmarks]);
 
-  // BroadcastChannel listener
+  // BroadcastChannel listener đồng bộ giữa các tab
   useEffect(() => {
     if (typeof window !== "undefined" && "BroadcastChannel" in window) {
       const bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
@@ -161,16 +133,13 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
       bc.onmessage = (event) => {
         if (event.data?.type === "BOOKMARK_TOGGLED") {
           const { movieId, bookmarkType, isBookmarked: nextState } = event.data;
-          const ref = bookmarkType === "watchlater" ? watchlaterIdsRef : favoriteIdsRef;
-          const updater = bookmarkType === "watchlater" ? updateWatchlaterIds : updateFavoriteIds;
-
-          const copy = new Set(ref.current);
-          if (nextState) {
-            copy.add(movieId);
-          } else {
-            copy.delete(movieId);
-          }
-          updater(copy);
+          const updater = bookmarkType === "watchlater" ? setWatchlaterIds : setFavoriteIds;
+          updater((prev) => {
+            const next = new Set(prev);
+            if (nextState) next.add(movieId);
+            else next.delete(movieId);
+            return next;
+          });
         } else if (event.data?.type === "BOOKMARK_REFRESH") {
           void refreshBookmarks();
         }
@@ -180,24 +149,12 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
         bc.close();
       };
     }
-  }, [refreshBookmarks, updateFavoriteIds, updateWatchlaterIds]);
+  }, [refreshBookmarks]);
 
   // Initial load
   useEffect(() => {
-    let ignore = false;
-    if (isAuthenticated && token) {
-      void (async () => {
-        if (!ignore) {
-          await refreshBookmarks();
-        }
-      })();
-    } else {
-      setLoading(false);
-    }
-    return () => {
-      ignore = true;
-    };
-  }, [isAuthenticated, token, refreshBookmarks]);
+    void refreshBookmarks();
+  }, [refreshBookmarks]);
 
   // Tự động gộp tủ phim Khách lên Cloud khi Đăng nhập
   useEffect(() => {
@@ -222,7 +179,7 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, token, getGuestBookmarks, refreshBookmarks]);
 
-  // Kiểm tra trạng thái lưu tức thì (0ms)
+  // Kiểm tra trạng thái lưu
   const isFavorite = useCallback((movieId: number) => favoriteIds.has(movieId), [favoriteIds]);
   const isWatchLater = useCallback((movieId: number) => watchlaterIds.has(movieId), [watchlaterIds]);
 
@@ -235,133 +192,31 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
     [favoriteIds, watchlaterIds]
   );
 
-  // Thực thi đồng bộ về Backend hoặc LocalStorage sau khi người dùng ngừng spam click
-  const flushSyncToBackendOrStorage = useCallback(
-    async (movieId: number, type: BookmarkType, targetState: boolean, movieMeta: MovieBookmarkMeta) => {
-      // 1. THÀNH VIÊN ĐÃ ĐĂNG NHẬP
-      if (isAuthenticated && token) {
-        const serverSet = type === "watchlater" ? serverWatchlaterIdsRef.current : serverFavoriteIdsRef.current;
-        const currentServerState = serverSet.has(movieId);
-
-        // Nếu sau chuỗi click liên tục, trạng thái cuối cùng giống trạng thái trên Server -> Không cần gọi API
-        if (currentServerState === targetState) {
-          return;
-        }
-
-        try {
-          const res = await toggleBookmarkApi({ movie_id: movieId, type }, token);
-          if (res.status === "success") {
-            const actualState = res.data.isBookmarked;
-            if (type === "watchlater") {
-              if (actualState) serverWatchlaterIdsRef.current.add(movieId);
-              else serverWatchlaterIdsRef.current.delete(movieId);
-            } else {
-              if (actualState) serverFavoriteIdsRef.current.add(movieId);
-              else serverFavoriteIdsRef.current.delete(movieId);
-            }
-          }
-        } catch {
-          // Khi lỗi mạng -> Rollback về trạng thái server
-          const rollbackSet = new Set(type === "watchlater" ? serverWatchlaterIdsRef.current : serverFavoriteIdsRef.current);
-          if (type === "watchlater") updateWatchlaterIds(rollbackSet);
-          else updateFavoriteIds(rollbackSet);
-
-          broadcastRef.current?.postMessage({
-            type: "BOOKMARK_TOGGLED",
-            movieId,
-            bookmarkType: type,
-            isBookmarked: rollbackSet.has(movieId),
-          });
-        }
-        return;
-      }
-
-      // 2. KHÁCH (GUEST MODE)
-      const guests = getGuestBookmarks();
-      let updated: GuestBookmarkItem[];
-
-      if (targetState) {
-        const rawGenres = movieMeta.genres;
-        const formattedGenres = Array.isArray(rawGenres)
-          ? rawGenres.map((g) => (typeof g === "string" ? g : g.name))
-          : undefined;
-
-        const newItem: GuestBookmarkItem = {
-          movieId,
-          type,
-          savedAt: new Date().toISOString(),
-          movie: {
-            id: movieMeta.id,
-            name: movieMeta.name,
-            originName: movieMeta.originName,
-            slug: movieMeta.slug,
-            posterUrl: movieMeta.posterUrl,
-            thumbUrl: movieMeta.thumbUrl,
-            year: movieMeta.year,
-            quality: movieMeta.quality,
-            ratingAvg: movieMeta.ratingAvg,
-            genres: formattedGenres,
-          },
-        };
-        updated = [
-          newItem,
-          ...guests.filter((g) => !(g.movieId === movieId && g.type === type)),
-        ];
-      } else {
-        updated = guests.filter((g) => !(g.movieId === movieId && g.type === type));
-      }
-
-      saveGuestBookmarks(updated);
-    },
-    [isAuthenticated, token, getGuestBookmarks, saveGuestBookmarks, updateFavoriteIds, updateWatchlaterIds]
-  );
-
-  // 8. Toggle Lưu / Bỏ lưu Phim Tức Thì (Instant 0ms + Debounced Cloud Sync)
+  // Toggle Lưu / Bỏ lưu Phim Tức Thì (Optimistic 0ms)
   const toggleBookmark = useCallback(
     async (
       movie: MovieBookmarkMeta,
       type: BookmarkType = "favorite"
     ): Promise<{ isBookmarked: boolean; message: string }> => {
-      const activeRef = type === "watchlater" ? watchlaterIdsRef : favoriteIdsRef;
-      const updater = type === "watchlater" ? updateWatchlaterIds : updateFavoriteIds;
+      const currentSet = type === "watchlater" ? watchlaterIds : favoriteIds;
+      const willBeSaved = !currentSet.has(movie.id);
 
-      // Đọc trạng thái từ Ref (Chính xác 100% thời gian thực, không bao giờ bị stale closure)
-      const wasSaved = activeRef.current.has(movie.id);
-      const willBeSaved = !wasSaved;
+      // 1. Optimistic Update State ngay lập tức
+      const updater = type === "watchlater" ? setWatchlaterIds : setFavoriteIds;
+      updater((prev) => {
+        const next = new Set(prev);
+        if (willBeSaved) next.add(movie.id);
+        else next.delete(movie.id);
+        return next;
+      });
 
-      // Cập nhật State & Ref tức thì (0ms) để UI phản hồi ngay lập tức
-      const nextSet = new Set(activeRef.current);
-      if (willBeSaved) {
-        nextSet.add(movie.id);
-      } else {
-        nextSet.delete(movie.id);
-      }
-      updater(nextSet);
-
-      // Bắn tín hiệu sang các tab khác ngay lập tức
+      // 2. Broadcast sang tab khác
       broadcastRef.current?.postMessage({
         type: "BOOKMARK_TOGGLED",
         movieId: movie.id,
         bookmarkType: type,
         isBookmarked: willBeSaved,
       });
-
-      // Gom cụm request (Debounce trailing edge) khi người dùng bấm liên tục
-      const syncKey = `${movie.id}_${type}`;
-      pendingMoviesRef.current.set(syncKey, movie);
-
-      const existingTimer = debounceTimersRef.current.get(syncKey);
-      if (existingTimer) {
-        clearTimeout(existingTimer);
-      }
-
-      const newTimer = setTimeout(() => {
-        debounceTimersRef.current.delete(syncKey);
-        const meta = pendingMoviesRef.current.get(syncKey) || movie;
-        void flushSyncToBackendOrStorage(movie.id, type, willBeSaved, meta);
-      }, SYNC_DEBOUNCE_MS);
-
-      debounceTimersRef.current.set(syncKey, newTimer);
 
       const actionLabel = type === "watchlater" ? "vào Xem sau" : "vào Yêu thích";
       if (willBeSaved) {
@@ -370,32 +225,89 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
         toast.info(`Đã xóa "${movie.name}" khỏi danh sách`);
       }
 
+      // 3. Đồng bộ Backend hoặc LocalStorage ngầm
+      if (isAuthenticated && token) {
+        // Fire-and-forget sync to backend
+        toggleBookmarkApi({ movie_id: movie.id, type }, token).catch(() => {
+          // Rollback nếu thất bại
+          updater((prev) => {
+            const next = new Set(prev);
+            if (willBeSaved) next.delete(movie.id);
+            else next.add(movie.id);
+            return next;
+          });
+          toast.error("Không thể cập nhật tủ phim. Vui lòng thử lại!");
+        });
+      } else {
+        const guests = getGuestBookmarks();
+        let updated: GuestBookmarkItem[];
+        if (willBeSaved) {
+          const rawGenres = movie.genres;
+          const formattedGenres = Array.isArray(rawGenres)
+            ? rawGenres.map((g) => (typeof g === "string" ? g : g.name))
+            : undefined;
+
+          const newItem: GuestBookmarkItem = {
+            movieId: movie.id,
+            type,
+            savedAt: new Date().toISOString(),
+            movie: {
+              id: movie.id,
+              name: movie.name,
+              originName: movie.originName,
+              slug: movie.slug,
+              posterUrl: movie.posterUrl,
+              thumbUrl: movie.thumbUrl,
+              year: movie.year,
+              quality: movie.quality,
+              ratingAvg: movie.ratingAvg,
+              genres: formattedGenres,
+            },
+          };
+          updated = [newItem, ...guests.filter((g) => !(g.movieId === movie.id && g.type === type))];
+        } else {
+          updated = guests.filter((g) => !(g.movieId === movie.id && g.type === type));
+        }
+        saveGuestBookmarks(updated);
+      }
+
       return {
         isBookmarked: willBeSaved,
-        message: willBeSaved
-          ? `Đã thêm ${actionLabel}`
-          : "Đã xóa khỏi danh sách",
+        message: willBeSaved ? `Đã thêm ${actionLabel}` : "Đã xóa khỏi danh sách",
       };
     },
-    [updateFavoriteIds, updateWatchlaterIds, flushSyncToBackendOrStorage]
+    [favoriteIds, watchlaterIds, isAuthenticated, token, getGuestBookmarks, saveGuestBookmarks]
+  );
+
+  const contextValue = useMemo<BookmarkContextValue>(
+    () => ({
+      isBookmarked,
+      isFavorite,
+      isWatchLater,
+      toggleBookmark,
+      favoriteCount: favoriteIds.size,
+      watchlaterCount: watchlaterIds.size,
+      totalCount: favoriteIds.size + watchlaterIds.size,
+      loading,
+      isPending: false,
+      refreshBookmarks,
+      getGuestBookmarks,
+    }),
+    [
+      isBookmarked,
+      isFavorite,
+      isWatchLater,
+      toggleBookmark,
+      favoriteIds.size,
+      watchlaterIds.size,
+      loading,
+      refreshBookmarks,
+      getGuestBookmarks,
+    ]
   );
 
   return (
-    <BookmarkContext.Provider
-      value={{
-        isBookmarked,
-        isFavorite,
-        isWatchLater,
-        toggleBookmark,
-        favoriteCount: favoriteIds.size,
-        watchlaterCount: watchlaterIds.size,
-        totalCount: favoriteIds.size + watchlaterIds.size,
-        loading,
-        isPending: false,
-        refreshBookmarks,
-        getGuestBookmarks,
-      }}
-    >
+    <BookmarkContext.Provider value={contextValue}>
       {children}
     </BookmarkContext.Provider>
   );

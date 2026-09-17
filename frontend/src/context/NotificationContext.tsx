@@ -9,7 +9,7 @@ import {
   markAllNotificationsAsReadApi,
   markNotificationAsReadApi,
 } from "@/lib/api";
-import { disconnectEcho, getEchoInstance } from "@/lib/echo";
+import { disconnectEcho } from "@/lib/echo";
 import type { NotificationItem, NotificationPaginationMeta } from "@/types/notification";
 import { toast } from "sonner";
 
@@ -47,7 +47,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       try {
         const res = await getNotificationsApi(pageToFetch, 15, token);
-        if (res && res.success) {
+        if (res && (res.status === "success" || res.success)) {
           setNotifications((prev) =>
             append ? [...prev, ...res.data] : res.data
           );
@@ -70,7 +70,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!isAuthenticated || !token) return;
     try {
       const res = await getUnreadNotificationsCountApi(token);
-      if (res && res.success) {
+      if (res && (res.status === "success" || res.success)) {
         setUnreadCount(res.data.unreadCount);
       }
     } catch {
@@ -95,17 +95,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, [isAuthenticated, token, fetchNotifications]);
 
-  // ── LARAVEL REVERB WEBSOCKET SUBSCRIPTION ──
+  // ── LARAVEL REVERB WEBSOCKET SUBSCRIPTION (dynamic import: pusher/echo chỉ load sau auth) ──
   useEffect(() => {
     if (!isAuthenticated || !token || !user?.id) {
       return;
     }
 
-    const echo = getEchoInstance(token);
-    if (!echo) return;
+    let channel: { stopListening: (event: string) => unknown } | null = null;
+    let cancelled = false;
 
-    const channelName = `user.${user.id}`;
-    const channel = echo.private(channelName);
+    import("@/lib/echo").then(({ getEchoInstance }) => {
+      if (cancelled) return;
+      const echo = getEchoInstance(token);
+      if (!echo) return;
+
+      const channelName = `user.${user.id}`;
+      channel = echo.private(channelName) as unknown as { stopListening: (event: string) => unknown };
 
     const handleNotificationEvent = (raw: unknown) => {
       let data: Record<string, unknown> = {};
@@ -184,31 +189,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       fetchNotifications(1, false);
     };
 
-    // Lắng nghe với dot prefix
-    channel.listen(".notification.sent", handleNotificationEvent);
-    // Lắng nghe không có dot prefix
-    channel.listen("notification.sent", handleNotificationEvent);
-    // Lắng nghe class name
-    channel.listen("NotificationSentEvent", handleNotificationEvent);
-    channel.listen(".NotificationSentEvent", handleNotificationEvent);
-
-    // Lắng nghe standard Laravel broadcast notification event
-    channel.notification((notif: Record<string, unknown>) => {
-      console.log("[Reverb WebSocket] Received standard notification:", notif);
-      handleNotificationEvent({ notification: notif });
-    });
-
-    // Lắng nghe mọi event đến channel (Safety Net)
-    channel.listenToAll((eventName: string, eventData: unknown) => {
-      console.log("[Reverb WebSocket] Event on channel:", eventName, eventData);
-      if (eventName.includes("notification") || eventName.includes("Notification")) {
-        handleNotificationEvent(eventData);
-      }
+    // Lắng nghe broadcast event chính thức từ Laravel Reverb
+    (channel as unknown as { listen: (event: string, cb: (raw: unknown) => void) => void })
+      .listen(".notification.sent", handleNotificationEvent);
     });
 
     return () => {
+      cancelled = true;
       try {
-        echo.leave(channelName);
+        channel?.stopListening(".notification.sent");
       } catch {
         // Ignore leave errors
       }
@@ -241,7 +230,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       try {
         const res = await markNotificationAsReadApi(id, token);
-        if (res && res.success) {
+        if (res && (res.status === "success" || res.success)) {
           setUnreadCount(res.data.unreadCount);
         }
       } catch (err) {

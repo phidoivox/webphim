@@ -2,12 +2,16 @@
 
 namespace App\Providers;
 
+use App\Models\Episode;
+use App\Models\EpisodeServer;
 use App\Models\Movie;
+use App\Observers\EpisodeObserver;
 use App\Observers\MovieObserver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Response;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -28,6 +32,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // Đăng ký Observer quản lý cache invalidation tự động
         Movie::observe(MovieObserver::class);
+        Episode::observe(EpisodeObserver::class);
+        EpisodeServer::observe(EpisodeObserver::class);
 
         // Kích hoạt Strict Mode cho Eloquent để phát hiện N+1 Query & unfillable attributes khi Dev/Test
         Model::shouldBeStrict(! $this->app->isProduction());
@@ -46,11 +52,9 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(120)->by($request->user()?->id ?: $request->ip());
         });
 
-        // Cấu hình Rate Limiter cho Auth routes chống brute-force
+        // Cấu hình Rate Limiter cho Auth routes chống brute-force (key theo IP — email rotate không bypass)
         RateLimiter::for('auth', function (Request $request) {
-            $email = (string) $request->input('email', '');
-
-            return Limit::perMinute(10)->by($email.$request->ip());
+            return Limit::perMinute(10)->by($request->ip());
         });
 
         // Cấu hình Rate Limiter cho bình luận chống spam
@@ -61,6 +65,24 @@ class AppServiceProvider extends ServiceProvider
         // Cấu hình Rate Limiter cho lượt thích bình luận
         RateLimiter::for('likes', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Macro đóng gói response phân trang chuẩn REST
+        Response::macro('paginated', function ($paginator, ?string $resourceClass = null, array $extraMeta = []) {
+            $data = $resourceClass ? $resourceClass::collection($paginator->items()) : $paginator->items();
+            $meta = array_merge([
+                'currentPage' => $paginator->currentPage(),
+                'lastPage' => $paginator->lastPage(),
+                'perPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'hasMore' => $paginator->hasMorePages(),
+            ], $extraMeta);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $data,
+                'meta' => $meta,
+            ]);
         });
     }
 }

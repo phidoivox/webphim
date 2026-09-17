@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
-import { getMovieDetail, NotFoundError } from "@/lib/api";
+import { NotFoundError } from "@/lib/api";
+import { getCachedMovieDetail } from "@/lib/cached-content";
 import WatchViewClient from "./WatchViewClient";
+import PlayerSkeleton from "@/components/ui/skeletons/PlayerSkeleton";
 
 interface PageProps {
   params: Promise<{ slug: string; episode: string }>;
@@ -13,8 +15,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug, episode } = await params;
 
   try {
-    const movie = await getMovieDetail(slug);
-    const ep = movie.episodes?.find((e) => e.slug === episode);
+    const movie = await getCachedMovieDetail(slug);
+    const numMatch = episode.match(/\d+/);
+    const ep =
+      movie.episodes?.find((e) => e.slug === episode) ??
+      (numMatch
+        ? movie.episodes?.find((e) => {
+            const eNum = e.slug.match(/\d+/);
+            return eNum && parseInt(eNum[0], 10) === parseInt(numMatch[0], 10);
+          })
+        : null) ??
+      movie.episodes?.[0];
     const epName = ep?.name ? ` - ${ep.name}` : "";
     const title = `Xem phim ${movie.name}${epName} (${movie.year || 2026}) | WebPhim`;
     const description = movie.content
@@ -57,12 +68,37 @@ async function WatchContent({ params }: PageProps) {
 
   let movie;
   try {
-    movie = await getMovieDetail(slug);
+    movie = await getCachedMovieDetail(slug);
   } catch (error) {
     if (error instanceof NotFoundError) {
       notFound();
     }
     throw error;
+  }
+
+  // Tự động chuyển hướng nếu slug tập không khớp chính xác nhưng có thể giải quyết được
+  const currentEp = movie.episodes?.find((e) => e.slug === episode);
+  if (!currentEp && movie.episodes && movie.episodes.length > 0) {
+    // 1. Khớp số tập (vd: tap-1 <-> tap-01)
+    const numMatch = episode.match(/\d+/);
+    if (numMatch) {
+      const num = parseInt(numMatch[0], 10);
+      const matched = movie.episodes.find((e) => {
+        const eNum = e.slug.match(/\d+/);
+        return eNum && parseInt(eNum[0], 10) === num;
+      });
+      if (matched) {
+        redirect(`/xem/${slug}/${matched.slug}`);
+      }
+    }
+
+    // 2. Phim lẻ hoặc fallback tập mặc định nếu truyền 'tap-1', 'full', 'tap-full'
+    if (episode === "tap-1" || episode === "full" || episode === "tap-full") {
+      redirect(`/xem/${slug}/${movie.episodes[0].slug}`);
+    }
+
+    // 3. Nếu tập hoàn toàn không tồn tại trong danh sách
+    notFound();
   }
 
   // Next.js 16 after() API: Thực thi telemetry / logging ngầm sau khi response hoàn tất, không chặn render
@@ -77,13 +113,7 @@ async function WatchContent({ params }: PageProps) {
 
 export default function WatchPage(props: PageProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-base animate-pulse">
-          <div className="aspect-video w-full max-w-6xl mx-auto bg-surface/60 rounded-2xl mt-4" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PlayerSkeleton />}>
       <WatchContent {...props} />
     </Suspense>
   );

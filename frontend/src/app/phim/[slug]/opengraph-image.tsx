@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { getMovieDetail } from '@/lib/api';
+import { getCachedMovieDetail } from '@/lib/cached-content';
 
 export const alt = 'WebPhim - Xem Phim Online';
 export const size = {
@@ -17,7 +17,7 @@ export default async function Image({ params }: Props) {
 
   let movie;
   try {
-    movie = await getMovieDetail(slug);
+    movie = await getCachedMovieDetail(slug);
   } catch {
     movie = {
       name: 'WebPhim Streaming',

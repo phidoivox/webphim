@@ -17,6 +17,26 @@ class Movie extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected static function booted(): void
+    {
+        // Khi tạo mới: nếu chưa có schedule_days mà có notify_schedule text thì parse tự động.
+        // Khi cập nhật: chỉ tự động parse nếu notify_schedule thực sự thay đổi (isDirty).
+        static::saving(function (Movie $movie) {
+            if (! empty($movie->schedule_days) || empty($movie->notify_schedule)) {
+                return;
+            }
+
+            if ($movie->exists && ! $movie->isDirty('notify_schedule')) {
+                return;
+            }
+
+            $parsed = self::parseScheduleDays($movie->notify_schedule);
+            if (! empty($parsed)) {
+                $movie->schedule_days = $parsed;
+            }
+        });
+    }
+
     protected $fillable = [
         'parent_id',
         'name',
@@ -39,7 +59,7 @@ class Movie extends Model
         'episode_current_num',
         'episode_total_num',
         'notify_schedule',
-        'schedule_day_of_week',
+        'schedule_days',
         'year',
         'imdb_rating',
         'tmdb_rating',
@@ -67,7 +87,7 @@ class Movie extends Model
             'is_cinema' => 'boolean',
             'is_featured' => 'boolean',
             'is_active' => 'boolean',
-            'schedule_day_of_week' => 'integer',
+            'schedule_days' => 'array',
             'imdb_rating' => 'float',
             'tmdb_rating' => 'float',
             'rating_avg' => 'float',
@@ -76,55 +96,110 @@ class Movie extends Model
     }
 
     /**
-     * Scope query lấy các phim có lịch chiếu theo ngày trong tuần.
+     * Tự động phân giải Model qua Route Binding hỗ trợ cả numeric ID lẫn slug.
+     *
+     * @param  Builder  $query
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return Builder
+     */
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        if ($field) {
+            return $query->where($field, $value);
+        }
+
+        // Hỗ trợ cả slug và ID (cho API endpoints nhận movie_id hoặc movie_slug)
+        // Nếu $value chỉ toàn số thì ưu tiên id trước, hoặc match slug nếu slug trùng số
+        if (ctype_digit((string) $value)) {
+            return $query->where(function ($q) use ($value) {
+                $q->where('id', (int) $value)
+                    ->orWhere('slug', (string) $value);
+            });
+        }
+
+        return $query->where('slug', (string) $value);
+    }
+
+    /**
+     * Scope query lấy các phim có lịch chiếu (schedule_days không rỗng).
      */
     public function scopeHasSchedule(Builder $query): Builder
     {
-        return $query->whereNotNull('schedule_day_of_week');
+        return $query->whereNotNull('schedule_days')->whereJsonLength('schedule_days', '>', 0);
     }
 
     /**
-     * Scope query lọc phim theo ngày chiếu cụ thể (0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7).
+     * Scope query lọc phim chiếu vào ngày cụ thể (0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7).
      */
     public function scopeOnDay(Builder $query, int $day): Builder
     {
-        return $query->where('schedule_day_of_week', $day);
+        return $query->whereJsonContains('schedule_days', $day);
     }
 
     /**
-     * Chuyển đổi chuỗi text mô tả lịch chiếu sang số ngày trong tuần.
+     * Chuyển đổi chuỗi text mô tả lịch chiếu sang mảng ngày trong tuần.
+     * Hỗ trợ nhiều ngày: "Thứ 3, Thứ 6" → [2, 5].
+     *
+     * @return int[]
      */
-    public static function parseScheduleDay(?string $text): ?int
+    public static function parseScheduleDays(?string $text): array
     {
         if (! $text) {
-            return null;
+            return [];
         }
 
         $lower = mb_strtolower($text, 'UTF-8');
+        $days = [];
 
-        if (str_contains($lower, 'chủ nhật') || str_contains($lower, 'chu nhat') || str_contains($lower, 'cn')) {
-            return 0;
+        if (str_contains($lower, 'chủ nhật') || str_contains($lower, 'chu nhat')) {
+            $days[] = 0;
         }
-        if (str_contains($lower, 'thứ 2') || str_contains($lower, 'thứ hai') || str_contains($lower, 'thu 2') || str_contains($lower, 'thu hai')) {
-            return 1;
-        }
-        if (str_contains($lower, 'thứ 3') || str_contains($lower, 'thứ ba') || str_contains($lower, 'thu 3') || str_contains($lower, 'thu ba')) {
-            return 2;
-        }
-        if (str_contains($lower, 'thứ 4') || str_contains($lower, 'thứ tư') || str_contains($lower, 'thứ bốn') || str_contains($lower, 'thu 4') || str_contains($lower, 'thu tu')) {
-            return 3;
-        }
-        if (str_contains($lower, 'thứ 5') || str_contains($lower, 'thứ năm') || str_contains($lower, 'thu 5') || str_contains($lower, 'thu nam')) {
-            return 4;
-        }
-        if (str_contains($lower, 'thứ 6') || str_contains($lower, 'thứ sáu') || str_contains($lower, 'thu 6') || str_contains($lower, 'thu sau')) {
-            return 5;
-        }
-        if (str_contains($lower, 'thứ 7') || str_contains($lower, 'thứ bảy') || str_contains($lower, 'thu 7') || str_contains($lower, 'thu bay')) {
-            return 6;
+        if (preg_match('/(^|[^a-zà-ỹ])cn([^a-zà-ỹ]|$)/u', $lower)) {
+            $days[] = 0;
         }
 
-        return null;
+        // Match "thứ N" / "thu N" patterns — có thể nhiều lần
+        if (preg_match_all('/(?:thứ|thu)\s*(\d)/u', $lower, $matches)) {
+            foreach ($matches[1] as $n) {
+                $n = (int) $n;
+                if ($n >= 2 && $n <= 7) {
+                    $days[] = $n === 7 ? 6 : $n - 1;
+                }
+            }
+        }
+
+        // Named days
+        if (str_contains($lower, 'thứ hai') || str_contains($lower, 'thu hai')) {
+            $days[] = 1;
+        }
+        if (str_contains($lower, 'thứ ba') || str_contains($lower, 'thu ba')) {
+            $days[] = 2;
+        }
+        if (str_contains($lower, 'thứ tư') || str_contains($lower, 'thứ bốn') || str_contains($lower, 'thu tu')) {
+            $days[] = 3;
+        }
+        if (str_contains($lower, 'thứ năm') || str_contains($lower, 'thu nam')) {
+            $days[] = 4;
+        }
+        if (str_contains($lower, 'thứ sáu') || str_contains($lower, 'thu sau')) {
+            $days[] = 5;
+        }
+        if (str_contains($lower, 'thứ bảy') || str_contains($lower, 'thu bay')) {
+            $days[] = 6;
+        }
+
+        return array_values(array_unique($days));
+    }
+
+    /**
+     * Backward-compat: parse text sang 1 ngày duy nhất (trả phần tử đầu hoặc null).
+     */
+    public static function parseScheduleDay(?string $text): ?int
+    {
+        $days = self::parseScheduleDays($text);
+
+        return $days[0] ?? null;
     }
 
     /**
@@ -144,13 +219,58 @@ class Movie extends Model
     }
 
     /**
-     * Scope query lọc phim theo loại (series, single, tv-show).
+     * Scope query lọc phim theo loại (series, single, tv-show, anime...).
      */
     public function scopeOfType(Builder $query, MovieType|string $type): Builder
     {
-        $typeValue = $type instanceof MovieType ? $type->value : $type;
+        $typeValue = $type instanceof MovieType ? $type->value : (string) $type;
+
+        if ($typeValue === 'tv-shows' || $typeValue === 'tv-show') {
+            return $query->where(function ($q) {
+                $q->where('type', 'tv-show')
+                    ->orWhere('type', 'tv-shows')
+                    ->orWhereHas('genres', fn ($gq) => $gq->where('slug', 'tv-shows'));
+            });
+        }
+
+        if ($typeValue === 'hoat-hinh' || $typeValue === 'anime') {
+            return $query->where(function ($q) {
+                $q->where('type', 'hoat-hinh')
+                    ->orWhere('type', 'anime')
+                    ->orWhereHas('genres', fn ($gq) => $gq->whereIn('slug', ['hoat-hinh', 'anime']));
+            });
+        }
 
         return $query->where('type', $typeValue);
+    }
+
+    /**
+     * Scope query lọc phim theo slug thể loại.
+     */
+    public function scopeOfGenre(Builder $query, string $genreSlug): Builder
+    {
+        return $query->whereHas('genres', fn (Builder $q) => $q->where('genres.slug', $genreSlug));
+    }
+
+    /**
+     * Scope query lọc phim theo slug quốc gia.
+     */
+    public function scopeOfCountry(Builder $query, string $countrySlug): Builder
+    {
+        return $query->whereHas('countries', fn (Builder $q) => $q->where('countries.slug', $countrySlug));
+    }
+
+    /**
+     * Scope query lọc phim theo ngôn ngữ / phụ đề.
+     */
+    public function scopeOfLang(Builder $query, string $lang): Builder
+    {
+        $escaped = str_replace(['%', '_'], ['\\%', '\\_'], trim($lang));
+
+        return $query->where(function ($q) use ($escaped, $lang) {
+            $q->where('lang', 'like', "%{$escaped}%")
+                ->orWhereHas('episodes.servers', fn ($sq) => $sq->where('lang_type', $lang));
+        });
     }
 
     /**

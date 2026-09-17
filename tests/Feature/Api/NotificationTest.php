@@ -64,10 +64,10 @@ class NotificationTest extends TestCase
 
         $response->assertOk()
             ->assertJson([
-                'success' => true,
+                'status' => 'success',
             ])
             ->assertJsonStructure([
-                'success',
+                'status',
                 'data' => [
                     '*' => [
                         'id',
@@ -103,7 +103,7 @@ class NotificationTest extends TestCase
 
         $response->assertOk()
             ->assertJson([
-                'success' => true,
+                'status' => 'success',
                 'data' => [
                     'unreadCount' => 2,
                 ],
@@ -121,7 +121,7 @@ class NotificationTest extends TestCase
 
         $response->assertOk()
             ->assertJson([
-                'success' => true,
+                'status' => 'success',
                 'data' => [
                     'unreadCount' => 0,
                 ],
@@ -152,7 +152,7 @@ class NotificationTest extends TestCase
 
         $response->assertOk()
             ->assertJson([
-                'success' => true,
+                'status' => 'success',
                 'data' => [
                     'unreadCount' => 0,
                 ],
@@ -172,7 +172,7 @@ class NotificationTest extends TestCase
 
         $response->assertOk()
             ->assertJson([
-                'success' => true,
+                'status' => 'success',
             ]);
 
         $this->assertDatabaseMissing('notifications', [

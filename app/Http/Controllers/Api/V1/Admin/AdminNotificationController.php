@@ -36,7 +36,7 @@ class AdminNotificationController extends Controller
         );
 
         return response()->json([
-            'success' => true,
+            'status' => 'success',
             'message' => "Đã gửi thông báo thành công tới {$sentCount} người dùng.",
             'data' => [
                 'sentCount' => $sentCount,

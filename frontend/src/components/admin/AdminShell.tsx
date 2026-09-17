@@ -18,7 +18,7 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         <AdminHeader />
-        {children}
+        <AdminAuthGuard>{children}</AdminAuthGuard>
       </div>
 
       {/* Global Command Palette Modal (Cmd+K / Ctrl+K) */}
@@ -36,10 +36,8 @@ export default function AdminShell({
   children: React.ReactNode;
 }) {
   return (
-    <AdminAuthGuard>
-      <AdminProvider>
-        <AdminShellContent>{children}</AdminShellContent>
-      </AdminProvider>
-    </AdminAuthGuard>
+    <AdminProvider>
+      <AdminShellContent>{children}</AdminShellContent>
+    </AdminProvider>
   );
 }

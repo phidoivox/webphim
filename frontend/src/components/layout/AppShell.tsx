@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import TabBar from "@/components/layout/TabBar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -23,9 +22,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <Header />
       </Suspense>
-      <main className="flex-1 pb-14 lg:pb-0">{children}</main>
+      <main className="flex-1">{children}</main>
       <Footer />
-      <TabBar />
     </>
   );
 }

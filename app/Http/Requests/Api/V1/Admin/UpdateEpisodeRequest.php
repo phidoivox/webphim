@@ -20,6 +20,7 @@ class UpdateEpisodeRequest extends FormRequest
             'slug' => ['sometimes', 'required', 'string', 'max:255'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'servers' => ['nullable', 'array'],
+            'servers.*.id' => ['nullable', 'integer'],
             'servers.*.server_name' => ['required', 'string', 'max:255'],
             'servers.*.lang_type' => ['required', new Enum(ServerLangType::class)],
             'servers.*.link_m3u8' => ['nullable', 'string', 'max:1000'],

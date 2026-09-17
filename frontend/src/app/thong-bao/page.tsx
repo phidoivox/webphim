@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { formatTimeAgo } from "@/lib/date";
+import NotificationSkeleton from "@/components/ui/skeletons/NotificationSkeleton";
 import type { NotificationIconType, NotificationItem } from "@/types/notification";
 
 type FilterTab = "all" | "unread" | "episode" | "comment" | "system";
@@ -84,14 +85,7 @@ export default function NotificationsPage() {
   };
 
   if (isAuthLoading) {
-    return (
-      <main className="min-h-screen pt-20 sm:pt-24 pb-16">
-        <div className="mx-auto max-w-4xl px-4 py-20 text-center text-white/50">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          <p className="mt-4 text-xs">Đang tải trung tâm thông báo...</p>
-        </div>
-      </main>
-    );
+    return <NotificationSkeleton />;
   }
 
   if (!isAuthenticated) {

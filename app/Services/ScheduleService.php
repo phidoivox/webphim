@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Movie;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 
 class ScheduleService
@@ -12,41 +13,14 @@ class ScheduleService
     public const CACHE_TTL = 1800; // 30 phút
 
     /**
-     * Lấy danh sách lịch chiếu phim trong tuần (nhóm theo ngày từ Chủ nhật = 0 đến Thứ 7 = 6).
+     * Lịch chiếu tuần (0 = CN .. 6 = T7), chỉ phim bộ/TV đang chiếu.
+     * Phim chiếu nhiều ngày xuất hiện ở mỗi ngày tương ứng.
      *
      * @return array<int, array<int, array<string, mixed>>>
      */
     public function getWeeklySchedule(): array
     {
-        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, function () {
-            $movies = Movie::query()
-                ->active()
-                ->hasSchedule()
-                ->with(['genres:id,name,slug'])
-                ->select([
-                    'id',
-                    'name',
-                    'origin_name',
-                    'slug',
-                    'thumb_url',
-                    'poster_url',
-                    'type',
-                    'status',
-                    'quality',
-                    'episode_current',
-                    'episode_total',
-                    'notify_schedule',
-                    'schedule_day_of_week',
-                    'rating_avg',
-                    'view_count',
-                    'year',
-                ])
-                ->orderBy('schedule_day_of_week')
-                ->orderByDesc('rating_avg')
-                ->orderByDesc('view_count')
-                ->get();
-
-            // Khởi tạo khung 7 ngày trong tuần
+        return Cache::tags(['movies', 'schedule'])->flexible(self::CACHE_KEY, [self::CACHE_TTL, self::CACHE_TTL * 2], function () {
             $schedule = [
                 0 => [], // Chủ nhật
                 1 => [], // Thứ 2
@@ -57,27 +31,13 @@ class ScheduleService
                 6 => [], // Thứ 7
             ];
 
-            foreach ($movies as $movie) {
-                $day = $movie->schedule_day_of_week;
-                if ($day !== null && isset($schedule[$day])) {
-                    $schedule[$day][] = [
-                        'id' => $movie->id,
-                        'name' => $movie->name,
-                        'originName' => $movie->origin_name,
-                        'slug' => $movie->slug,
-                        'thumbUrl' => $movie->thumb_url ?: $movie->poster_url,
-                        'posterUrl' => $movie->poster_url ?: $movie->thumb_url,
-                        'type' => $movie->type instanceof \BackedEnum ? $movie->type->value : $movie->type,
-                        'status' => $movie->status instanceof \BackedEnum ? $movie->status->value : $movie->status,
-                        'quality' => $movie->quality instanceof \BackedEnum ? $movie->quality->value : $movie->quality,
-                        'episodeCurrent' => $movie->episode_current,
-                        'episodeTotal' => $movie->episode_total,
-                        'notifySchedule' => $movie->notify_schedule,
-                        'scheduleDayOfWeek' => $movie->schedule_day_of_week,
-                        'ratingAvg' => (float) $movie->rating_avg,
-                        'year' => $movie->year,
-                        'genres' => $movie->genres->pluck('name')->all(),
-                    ];
+            foreach ($this->baseQuery()->get() as $movie) {
+                $days = $movie->schedule_days ?? [];
+                $item = $this->toItem($movie);
+                foreach ($days as $day) {
+                    if (isset($schedule[$day])) {
+                        $schedule[$day][] = $item;
+                    }
                 }
             }
 
@@ -86,10 +46,79 @@ class ScheduleService
     }
 
     /**
-     * Xóa cache lịch chiếu phim.
+     * Lịch 1 ngày (?day=0-6), query qua scopeOnDay (JSON_CONTAINS).
+     *
+     * @return array<int, array<string, mixed>>
      */
-    public function clearCache(): void
+    public function getScheduleByDay(int $day): array
     {
-        Cache::forget(self::CACHE_KEY);
+        return Cache::tags(['movies', 'schedule'])->flexible(
+            self::CACHE_KEY.":day:{$day}",
+            [self::CACHE_TTL, self::CACHE_TTL * 2],
+            fn () => $this->baseQuery()->onDay($day)->get()->map(fn ($movie) => $this->toItem($movie))->all()
+        );
+    }
+
+    /**
+     * Query gốc: phim active, có lịch chiếu, status ongoing, loại series/tv-show.
+     */
+    private function baseQuery(): Builder
+    {
+        return Movie::query()
+            ->active()
+            ->hasSchedule()
+            ->where('status', 'ongoing')
+            ->where(function ($q) {
+                $q->whereIn('type', ['series', 'tv-show', 'tv-shows', 'anime', 'hoat-hinh'])
+                    ->orWhereHas('genres', fn ($gq) => $gq->whereIn('slug', ['tv-shows', 'anime', 'hoat-hinh']));
+            })
+            ->with(['genres:id,name,slug'])
+            ->select([
+                'id',
+                'name',
+                'origin_name',
+                'slug',
+                'thumb_url',
+                'poster_url',
+                'type',
+                'status',
+                'quality',
+                'episode_current',
+                'episode_total',
+                'notify_schedule',
+                'schedule_days',
+                'rating_avg',
+                'view_count',
+                'year',
+            ])
+            ->orderByDesc('rating_avg')
+            ->orderByDesc('view_count');
+    }
+
+    /**
+     * Map 1 phim sang item lịch chiếu (camelCase cho frontend).
+     *
+     * @return array<string, mixed>
+     */
+    private function toItem(Movie $movie): array
+    {
+        return [
+            'id' => $movie->id,
+            'name' => $movie->name,
+            'originName' => $movie->origin_name,
+            'slug' => $movie->slug,
+            'thumbUrl' => $movie->thumb_url ?: $movie->poster_url,
+            'posterUrl' => $movie->poster_url ?: $movie->thumb_url,
+            'type' => $movie->type instanceof \BackedEnum ? $movie->type->value : $movie->type,
+            'status' => $movie->status instanceof \BackedEnum ? $movie->status->value : $movie->status,
+            'quality' => $movie->quality instanceof \BackedEnum ? $movie->quality->value : $movie->quality,
+            'episodeCurrent' => $movie->episode_current,
+            'episodeTotal' => $movie->episode_total,
+            'notifySchedule' => $movie->notify_schedule,
+            'scheduleDays' => $movie->schedule_days ?? [],
+            'ratingAvg' => (float) $movie->rating_avg,
+            'year' => $movie->year,
+            'genres' => $movie->genres->pluck('name')->all(),
+        ];
     }
 }

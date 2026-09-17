@@ -125,7 +125,7 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
   }, [movie, activeServer]);
 
   const firstEpisode = movie.episodes[0];
-  const firstEpisodeSlug = firstEpisode?.slug ?? "tap-1";
+  const firstEpisodeSlug = firstEpisode?.slug;
   const similarSection: CarouselSection = { id: "similar", title: "Phim tương tự", movies: movie.similar };
 
   const episodeLabel = movie.episodeCurrent
@@ -295,7 +295,7 @@ export default function MovieDetailView({ movie }: { movie: MovieDetail }) {
                 
                 {/* Orange Xem ngay Button */}
                 <Link
-                  href={`/xem/${movie.slug}/${firstEpisodeSlug}`}
+                  href={firstEpisodeSlug ? `/xem/${movie.slug}/${firstEpisodeSlug}` : `/xem/${movie.slug}`}
                   className="flex items-center gap-2 rounded-full bg-accent hover:bg-accent-hover px-7 py-2.5 text-sm font-extrabold text-white transition-transform hover:scale-105 active:scale-95 shadow-md shadow-accent/30"
                 >
                   <PlayIcon className="h-4 w-4 fill-current ml-0.5" />

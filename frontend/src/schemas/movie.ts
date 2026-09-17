@@ -50,6 +50,8 @@ export const movieFormSchema = z.object({
   duration: z.string().trim().optional().or(z.literal("")),
   episode_current: z.string().trim().optional().or(z.literal("")),
   episode_total: z.string().trim().optional().or(z.literal("")),
+  notify_schedule: z.string().trim().max(255).optional().or(z.literal("")),
+  schedule_days: z.array(z.number().int().min(0).max(6)).max(7).optional().default([]),
   year: z.coerce.number().int().min(1900).max(2100).default(() => new Date().getFullYear()),
   is_active: z.boolean().default(true),
   is_featured: z.boolean().default(false),
@@ -65,6 +67,7 @@ export const movieFormSchema = z.object({
   actors: z.array(movieActorSchema).default([]),
   directors: z.array(movieDirectorSchema).default([]),
   galleries: z.array(movieGalleryItemSchema).default([]),
+  episodes: z.array(z.any()).optional().default([]),
 });
 
 export type MovieFormInput = z.infer<typeof movieFormSchema>;

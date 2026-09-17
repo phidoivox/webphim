@@ -1,23 +1,68 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertTriangleIcon, LoginIcon, SendIcon, UserIcon } from "@/components/ui/icons";
 import { useAuth } from "@/context/AuthContext";
 import { commentSchema, type CommentInput } from "@/schemas/comment";
+import { AlertTriangleIcon, LoginIcon, SendIcon, UserIcon } from "@/components/ui/icons";
 import { setFormApiErrors } from "@/lib/form-utils";
-import type { PostCommentPayload } from "@/types/comment";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface CommentFormProps {
-  onSubmit: (payload: PostCommentPayload) => Promise<unknown>;
+  onSubmit: (payload: { content: string; is_spoiler: boolean; parent_id?: number | null }) => Promise<unknown>;
   parentId?: number | null;
   placeholder?: string;
   autoFocus?: boolean;
   onCancel?: () => void;
+}
+
+function CommentSubmitSection({
+  control,
+  isSubmitting,
+  onCancel,
+  parentId,
+}: {
+  control: Control<CommentInput>;
+  isSubmitting: boolean;
+  onCancel?: () => void;
+  parentId?: number | null;
+}) {
+  const content = useWatch({ control, name: "content", defaultValue: "" }) || "";
+
+  return (
+    <div className="flex items-center gap-2 ml-auto">
+      <span className="text-[11px] text-slate-500 mr-2 tabular-nums">
+        {content.length}/2000
+      </span>
+
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className="rounded-xl px-3.5 py-1.5 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition cursor-pointer"
+        >
+          Hủy
+        </button>
+      )}
+
+      <button
+        type="submit"
+        disabled={!content.trim() || isSubmitting}
+        className="inline-flex items-center gap-1.5 rounded-xl bg-accent hover:bg-accent-hover px-4 py-1.5 text-xs font-bold text-white transition-all disabled:opacity-40 disabled:pointer-events-none shadow-md shadow-accent/20 cursor-pointer"
+      >
+        {isSubmitting ? (
+          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+        ) : (
+          <SendIcon className="h-3.5 w-3.5" />
+        )}
+        <span>{parentId ? "Trả lời" : "Gửi bình luận"}</span>
+      </button>
+    </div>
+  );
 }
 
 export default function CommentForm({
@@ -33,7 +78,7 @@ export default function CommentForm({
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     reset,
     setError,
     formState: { errors, isSubmitting },
@@ -45,8 +90,6 @@ export default function CommentForm({
       parent_id: parentId,
     },
   });
-
-  const contentValue = watch("content") || "";
 
   if (!isAuthenticated) {
     return (
@@ -152,35 +195,12 @@ export default function CommentForm({
             </label>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="text-[11px] text-slate-500 mr-2 tabular-nums">
-                {contentValue.length}/2000
-              </span>
-
-              {onCancel && (
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  disabled={isSubmitting}
-                  className="rounded-xl px-3.5 py-1.5 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition cursor-pointer"
-                >
-                  Hủy
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={!contentValue.trim() || isSubmitting}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-accent hover:bg-accent-hover px-4 py-1.5 text-xs font-bold text-white transition-all disabled:opacity-40 disabled:pointer-events-none shadow-md shadow-accent/20 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <SendIcon className="h-3.5 w-3.5" />
-                )}
-                <span>{parentId ? "Trả lời" : "Gửi bình luận"}</span>
-              </button>
-            </div>
+            <CommentSubmitSection
+              control={control}
+              isSubmitting={isSubmitting}
+              onCancel={onCancel}
+              parentId={parentId}
+            />
           </div>
         </div>
       </div>

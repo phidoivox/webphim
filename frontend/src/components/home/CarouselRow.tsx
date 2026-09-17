@@ -16,14 +16,14 @@ export default function CarouselRow({ section }: { section: CarouselSection }) {
 
   return (
     <section>
-      <div className="mb-3 flex items-end justify-between px-4 lg:px-10">
-        <h2 className="font-display text-lg font-bold text-ink lg:text-xl">{section.title}</h2>
+      <div className="mb-3 flex items-end justify-between px-3 sm:px-6 lg:px-10">
+        <h2 className="font-display text-base font-bold text-ink sm:text-lg lg:text-xl tracking-tight">{section.title}</h2>
         <div className="hidden gap-2 lg:flex">
           <button
             type="button"
             onClick={() => scroll(-1)}
             aria-label={`Lùi: ${section.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted transition-colors hover:bg-elevated hover:text-accent"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-white/5 text-muted transition-colors hover:bg-elevated hover:text-accent cursor-pointer"
           >
             <ChevronLeftIcon className="h-4 w-4" />
           </button>
@@ -31,7 +31,7 @@ export default function CarouselRow({ section }: { section: CarouselSection }) {
             type="button"
             onClick={() => scroll(1)}
             aria-label={`Tiến: ${section.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted transition-colors hover:bg-elevated hover:text-accent"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-white/5 text-muted transition-colors hover:bg-elevated hover:text-accent cursor-pointer"
           >
             <ChevronRightIcon className="h-4 w-4" />
           </button>
@@ -39,12 +39,12 @@ export default function CarouselRow({ section }: { section: CarouselSection }) {
       </div>
       <div
         ref={scrollerRef}
-        className="flex snap-x gap-3 overflow-x-auto px-4 pt-6 pb-8 -my-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:px-10"
+        className="flex snap-x snap-mandatory scroll-smooth gap-2.5 sm:gap-3.5 overflow-x-auto px-3 sm:px-6 lg:px-10 pt-4 pb-6 -my-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {section.movies.map((movie) => (
           <div
             key={movie.id}
-            className="snap-start shrink-0 w-[140px] sm:w-[160px] lg:w-[175px]"
+            className="snap-start shrink-0 w-[125px] xs:w-[140px] sm:w-[160px] md:w-[170px] lg:w-[185px]"
           >
             <MovieCard movie={movie} className="w-full" />
           </div>

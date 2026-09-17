@@ -175,17 +175,21 @@ export default function AdminDataTable<T extends { id?: string | number; [key: s
           {/* Table Body */}
           <tbody className="divide-y divide-white/5">
             {loading ? (
-              // Skeleton loading state (5 placeholder rows)
-              Array.from({ length: 5 }).map((_, idx) => (
-                <tr key={`skeleton-${idx}`} className="animate-pulse">
+              // Enhanced Skeleton loading state (6 placeholder rows with shimmer)
+              Array.from({ length: 6 }).map((_, idx) => (
+                <tr key={`skeleton-${idx}`} className="animate-shimmer bg-surface/30">
                   {selectable && (
                     <td className="px-4 py-3.5 text-center">
-                      <div className="h-4 w-4 mx-auto rounded bg-white/10" />
+                      <div className="h-4 w-4 mx-auto rounded-md bg-white/10" />
                     </td>
                   )}
-                  {columns.map((col) => (
+                  {columns.map((col, cIdx) => (
                     <td key={col.id} className="px-4 py-3.5">
-                      <div className="h-4 w-3/4 rounded bg-white/10" />
+                      <div
+                        className={`h-4 rounded-md bg-white/10 ${
+                          cIdx === 0 ? "w-4/5 animate-pulse bg-white/15" : cIdx % 2 === 0 ? "w-1/2" : "w-2/3"
+                        }`}
+                      />
                     </td>
                   ))}
                 </tr>

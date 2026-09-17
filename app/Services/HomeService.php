@@ -22,7 +22,7 @@ class HomeService
      */
     public function getHomeData(): array
     {
-        return Cache::flexible(self::CACHE_KEY, [self::CACHE_FRESH_TTL, self::CACHE_STALE_TTL], function (): array {
+        return Cache::tags(['movies', 'home'])->flexible(self::CACHE_KEY, [self::CACHE_FRESH_TTL, self::CACHE_STALE_TTL], function (): array {
             $heroMovies = Movie::query()
                 ->active()
                 ->with([
@@ -45,7 +45,7 @@ class HomeService
                         'thumbUrl' => $m->thumb_url,
                         'backdropUrl' => $m->thumb_url,
                         'year' => $m->year,
-                        'quality' => $m->quality instanceof \BackedEnum ? $m->quality->value : $m->quality,
+                        'quality' => $m->quality,
                         'ratingAvg' => $m->tmdb_rating > 0 ? (float) $m->tmdb_rating : (float) $m->rating_avg,
                         'imdbRating' => $m->imdb_rating > 0 ? (float) $m->imdb_rating : null,
                         'genres' => $m->relationLoaded('genres')
@@ -116,13 +116,5 @@ class HomeService
                 ],
             ];
         });
-    }
-
-    /**
-     * Xóa cache trang chủ chủ động.
-     */
-    public function clearCache(): void
-    {
-        Cache::forget(self::CACHE_KEY);
     }
 }

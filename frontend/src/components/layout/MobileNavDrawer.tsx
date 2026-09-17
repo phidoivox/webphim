@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -28,10 +28,18 @@ export default function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProp
   const [openGenres, setOpenGenres] = useState(false);
   const [openCountries, setOpenCountries] = useState(false);
 
-  // Close drawer whenever route changes
+  const prevPathRef = useRef(`${pathname}?${searchParams?.toString() || ""}`);
+
+  // Chỉ đóng drawer khi người dùng thực sự chuyển sang route khác
   useEffect(() => {
-    onClose();
-  }, [pathname, searchParams, onClose]);
+    const currentPath = `${pathname}?${searchParams?.toString() || ""}`;
+    if (prevPathRef.current !== currentPath) {
+      prevPathRef.current = currentPath;
+      if (isOpen) {
+        onClose();
+      }
+    }
+  }, [pathname, searchParams, isOpen, onClose]);
 
   // Lock body scroll when drawer is open
   useEffect(() => {
@@ -85,8 +93,12 @@ export default function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProp
   ];
 
   const handleLogout = async () => {
-    onClose();
-    await logout();
+    try {
+      onClose();
+      await logout();
+    } catch (err) {
+      console.error("Lỗi đăng xuất", err);
+    }
   };
 
   const initialLetter = user?.name
@@ -102,7 +114,7 @@ export default function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProp
       />
 
       {/* Drawer Panel */}
-      <div className="relative h-full w-[85%] max-w-sm bg-[#121216] border-r border-white/10 p-5 shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-left duration-250">
+      <div className="relative h-full w-[85%] max-w-sm bg-[#121216] border-r border-white/10 p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-left duration-250 [scrollbar-width:none]">
         {/* Top Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4">
           <Link
@@ -110,14 +122,14 @@ export default function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProp
             onClick={onClose}
             className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight text-ink"
           >
-            <PlayIcon className="h-6 w-6 text-accent" />
-            PHIM HAY
+            <PlayIcon className="h-5.5 w-5.5 text-accent" />
+            <span>PHIM HAY</span>
           </Link>
           <button
             type="button"
             onClick={onClose}
             aria-label="Đóng menu"
-            className="rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white transition cursor-pointer"
+            className="rounded-xl p-2.5 text-white/70 hover:bg-white/10 hover:text-white transition active:scale-95 cursor-pointer"
           >
             <XIcon className="h-5 w-5" />
           </button>

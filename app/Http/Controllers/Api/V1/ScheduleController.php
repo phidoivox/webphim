@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Services\ScheduleService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ScheduleController extends Controller
 {
@@ -13,15 +14,24 @@ class ScheduleController extends Controller
     ) {}
 
     /**
-     * Lấy danh sách lịch chiếu phim theo tuần (nhóm theo các thứ trong tuần).
+     * Lịch chiếu tuần, hoặc 1 ngày với ?day=0-6 (0 = Chủ nhật).
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $schedule = $this->scheduleService->getWeeklySchedule();
+        $validated = $request->validate([
+            'day' => ['sometimes', 'integer', 'between:0,6'],
+        ]);
+
+        if (array_key_exists('day', $validated)) {
+            return response()->json([
+                'status' => 'success',
+                'data' => $this->scheduleService->getScheduleByDay((int) $validated['day']),
+            ]);
+        }
 
         return response()->json([
-            'success' => true,
-            'data' => $schedule,
+            'status' => 'success',
+            'data' => $this->scheduleService->getWeeklySchedule(),
         ]);
     }
 }

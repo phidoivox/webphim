@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/context/AuthContext";
 import { registerSchema, type RegisterInput } from "@/schemas/auth";
@@ -12,10 +12,50 @@ import { AlertCircleIcon, LoaderIcon, MailIcon, UserIcon } from "@/components/ui
 import PasswordInput from "./PasswordInput";
 import { toast } from "sonner";
 
+function PasswordStrengthMeter({ control }: { control: Control<RegisterInput> }) {
+  const password = useWatch({ control, name: "password", defaultValue: "" }) || "";
+  if (!password) return null;
+
+  let score = 0;
+  if (password.length >= 6) score += 1;
+  if (password.length >= 10) score += 1;
+  if (/[A-Z]/.test(password) || /[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+  const strengthLabels = ["Rất yếu", "Yếu", "Trung bình", "Khá", "Rất mạnh"];
+  const strengthColors = [
+    "bg-neutral-600",
+    "bg-red-500",
+    "bg-amber-500",
+    "bg-blue-500",
+    "bg-emerald-500",
+  ];
+
+  return (
+    <div className="pt-1">
+      <div className="flex items-center justify-between text-[11px] text-white/50 mb-1">
+        <span>Độ an toàn:</span>
+        <span className="font-semibold text-white/80">{strengthLabels[score]}</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5 h-1.5 w-full">
+        {[1, 2, 3, 4].map((step) => (
+          <div
+            key={step}
+            className={`h-full rounded-full transition-all duration-300 ${
+              score >= step ? strengthColors[score] : "bg-white/10"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect") || "/";
+  const rawRedirect = searchParams.get("redirect") || "/";
+  const redirectUrl = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/";
 
   const { register: registerAuth } = useAuth();
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -23,7 +63,7 @@ export default function RegisterForm() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<RegisterInput>({
@@ -35,28 +75,6 @@ export default function RegisterForm() {
       passwordConfirmation: "",
     },
   });
-
-  const passwordValue = watch("password") || "";
-
-  // Password strength calculation
-  const passwordStrength = useMemo(() => {
-    if (!passwordValue) return 0;
-    let score = 0;
-    if (passwordValue.length >= 6) score += 1;
-    if (passwordValue.length >= 10) score += 1;
-    if (/[A-Z]/.test(passwordValue) || /[0-9]/.test(passwordValue)) score += 1;
-    if (/[^A-Za-z0-9]/.test(passwordValue)) score += 1;
-    return score; // 0 to 4
-  }, [passwordValue]);
-
-  const strengthLabels = ["Rất yếu", "Yếu", "Trung bình", "Khá", "Rất mạnh"];
-  const strengthColors = [
-    "bg-neutral-600",
-    "bg-red-500",
-    "bg-amber-500",
-    "bg-blue-500",
-    "bg-emerald-500",
-  ];
 
   const onSubmit = async (data: RegisterInput) => {
     setGeneralError(null);
@@ -162,26 +180,7 @@ export default function RegisterForm() {
         />
 
         {/* Realtime Password Strength Meter */}
-        {passwordValue.length > 0 && (
-          <div className="pt-1">
-            <div className="flex items-center justify-between text-[11px] text-white/50 mb-1">
-              <span>Độ an toàn:</span>
-              <span className="font-semibold text-white/80">{strengthLabels[passwordStrength]}</span>
-            </div>
-            <div className="grid grid-cols-4 gap-1.5 h-1.5 w-full">
-              {[1, 2, 3, 4].map((step) => (
-                <div
-                  key={step}
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    passwordStrength >= step
-                      ? strengthColors[passwordStrength]
-                      : "bg-white/10"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        <PasswordStrengthMeter control={control} />
       </div>
 
       {/* Confirm Password Input */}

@@ -18,6 +18,14 @@ class Episode extends Model
         'sort_order',
     ];
 
+    /**
+     * Tự động cập nhật timestamp cho Movie cha khi có thay đổi trên Episode
+     * nhằm kích hoạt MovieObserver xóa cache và revalidate Next.js.
+     *
+     * @var array<int, string>
+     */
+    protected $touches = ['movie'];
+
     public function movie(): BelongsTo
     {
         return $this->belongsTo(Movie::class);
