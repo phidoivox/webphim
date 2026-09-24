@@ -1,0 +1,77 @@
+# ---- Build stage ----
+FROM php:8.3-fpm-alpine AS build
+
+# System deps for extensions + composer
+RUN apk add --no-cache \
+    icu-dev libzip-dev libxml2-dev curl-dev oniguruma-dev \
+    freetype-dev libjpeg-turbo-dev libpng-dev \
+    linux-headers unzip git nodejs npm \
+  && docker-php-ext-configure gd --with-freetype --with-jpeg \
+  && docker-php-ext-install -j$(nproc) \
+    pdo_mysql mbstring xml ctype curl fileinfo tokenizer \
+    pcntl bcmath intl zip opcache gd
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-scripts --optimize-autoloader --prefer-dist
+
+COPY . .
+RUN COMPOSER_ALLOW_SUPERUSER=1 composer run-script post-autoload-dump
+
+# Build Vite assets (Laravel blade, not the Next.js frontend)
+RUN npm ci --ignore-scripts && npm run build
+
+# ---- Production stage ----
+FROM php:8.3-fpm-alpine
+
+RUN apk add --no-cache \
+    icu-libs libzip libxml2 curl oniguruma \
+    freetype libjpeg-turbo libpng su-exec \
+  && docker-php-ext-configure gd --with-freetype --with-jpeg \
+  && docker-php-ext-install -j$(nproc) \
+    pdo_mysql mbstring xml ctype curl fileinfo tokenizer \
+    pcntl bcmath intl zip opcache gd
+
+# PHP production tuning
+RUN { \
+    echo 'opcache.enable=1'; \
+    echo 'opcache.memory_consumption=256'; \
+    echo 'opcache.interned_strings_buffer=64'; \
+    echo 'opcache.max_accelerated_files=30000'; \
+    echo 'opcache.validate_timestamps=0'; \
+    echo 'opcache.save_comments=1'; \
+    echo 'expose_php=Off'; \
+  } > /usr/local/etc/php/conf.d/opcache.ini
+
+WORKDIR /app
+
+COPY --from=build /app/vendor ./vendor
+COPY --from=build /app/public ./public
+COPY --from=build /app/bootstrap ./bootstrap
+COPY --from=build /app/config ./config
+COPY --from=build /app/database ./database
+COPY --from=build /app/routes ./routes
+COPY --from=build /app/app ./app
+COPY --from=build /app/artisan ./artisan
+COPY --from=build /app/composer.json ./composer.json
+COPY --from=build /app/vite.config.js ./vite.config.js
+
+# Storage structure (volumes mount over this in compose)
+RUN mkdir -p storage/app/public storage/framework/{cache/data,sessions,views} \
+    storage/logs bootstrap/cache \
+  && chown -R www-data:www-data storage bootstrap/cache
+
+# Entrypoint script
+COPY docker/backend-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Chạy entrypoint dưới root để chown volume, sau đó hạ quyền www-data
+EXPOSE 9000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD php artisan tinker --execute="echo 'ok';" || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["php-fpm"]

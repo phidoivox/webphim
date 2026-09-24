@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ServerLangType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,9 +22,17 @@ class EpisodeServer extends Model
         'is_active',
     ];
 
+    /**
+     * Tự động cập nhật timestamp cho Episode cha khi có thay đổi trên Server phát.
+     *
+     * @var array<int, string>
+     */
+    protected $touches = ['episode'];
+
     protected function casts(): array
     {
         return [
+            'lang_type' => ServerLangType::class,
             'subtitles' => 'array',
             'is_active' => 'boolean',
         ];

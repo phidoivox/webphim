@@ -29,3 +29,19 @@ Thumbs.db
 # Next.js build output (frontend/)
 /frontend/.next
 /frontend/next-env.d.ts
+
+# Docker runtime env (chứa secret)
+.env.docker
+!.env.docker.example
+
+# SQLite dev artifacts
+database/*.sqlite
+
+# Python leftovers
+__pycache__/
+*.pyc
+
+# Superpowers / temp diffs
+.superpowers/
+.tmp-reuse-branch.diff
+

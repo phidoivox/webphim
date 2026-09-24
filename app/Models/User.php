@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -72,5 +73,34 @@ class User extends Authenticatable
     public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
+    }
+
+    public function collections(): HasMany
+    {
+        return $this->hasMany(Collection::class, 'created_by');
+    }
+
+    /**
+     * Kiểm tra người dùng có quyền quản trị (Admin hoặc Moderator) và đang hoạt động.
+     */
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['admin', 'moderator'], true) && (bool) $this->is_active;
+    }
+
+    /**
+     * Kiểm tra người dùng có quyền quản trị cấp cao nhất (Super Admin).
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'admin' && (bool) $this->is_active;
+    }
+
+    /**
+     * Kiểm tra người dùng là kiểm duyệt viên (Moderator).
+     */
+    public function isModerator(): bool
+    {
+        return $this->role === 'moderator' && (bool) $this->is_active;
     }
 }

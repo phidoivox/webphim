@@ -16,20 +16,23 @@ export default function TabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-elevated bg-surface lg:hidden" aria-label="Điều hướng mobile">
-      <ul className="flex">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-elevated/80 bg-surface/95 backdrop-blur-lg pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden shadow-lg shadow-black/40"
+      aria-label="Điều hướng mobile"
+    >
+      <ul className="flex items-center">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <li key={href} className="flex-1">
               <Link
                 href={href}
-                className={`flex flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${
-                  active ? "text-accent" : "text-muted"
+                className={`flex min-h-[44px] flex-col items-center justify-center gap-1 py-1 text-[10px] font-medium transition-all active:scale-95 select-none ${
+                  active ? "text-accent font-bold" : "text-muted hover:text-white/80"
                 }`}
               >
-                <Icon className="h-5 w-5" />
-                {label}
+                <Icon className={`h-5 w-5 transition-transform ${active ? "scale-110" : ""}`} />
+                <span className="leading-none">{label}</span>
               </Link>
             </li>
           );

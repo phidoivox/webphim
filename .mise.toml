@@ -1,7 +1,6 @@
 [tools]
-claude-code = { version = "latest", bin = "claude", checksum_expr = '"sha256:" + fromJSON(body).platforms[(os == "macos" ? "darwin" : (os == "windows" ? "win32" : "linux")) + "-" + arch].checksum', checksum_url = "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/{{ version }}/manifest.json", platforms = { windows-x64 = { bin = "claude.exe", url = "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/{{ version }}/win32-x64/claude.exe" } }, url = 'https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/{{ version }}/{{ os(macos="darwin") }}-{{ arch() }}/claude', version_list_url = "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/latest" }
-node = "24.18.1"
-pnpm = "11.20.0"
+node = "24.21.0"
+pnpm = "12.4.1"
 
 [env]
 # Tự động thêm CLI binaries local (như next, eslint) vào PATH để chạy trực tiếp không cần npx
@@ -25,3 +24,23 @@ run = "pnpm build"
 description = "Cài đặt dependencies cho frontend"
 dir = "frontend"
 run = "pnpm install"
+
+[tasks."docker:build"]
+description = "Build Docker images (điền .env.docker trước — NEXT_PUBLIC_* bake lúc build)"
+run = "docker compose --env-file .env.docker build"
+
+[tasks."docker:up"]
+description = "Chạy stack Docker (tự migrate + cache config)"
+run = "docker compose --env-file .env.docker up -d"
+
+[tasks."docker:down"]
+description = "Dừng stack Docker (giữ data DB)"
+run = "docker compose --env-file .env.docker down"
+
+[tasks."docker:logs"]
+description = "Xem logs backend/nginx/frontend"
+run = "docker compose --env-file .env.docker logs -f backend nginx frontend"
+
+[tasks."docker:seed"]
+description = "Seed dữ liệu nền Genre + Country (chạy 1 lần duy nhất)"
+run = "docker compose --env-file .env.docker exec backend php artisan db:seed --class=GenreSeeder && docker compose --env-file .env.docker exec backend php artisan db:seed --class=CountrySeeder"
